@@ -1,3 +1,20 @@
+{*******************************************************}
+{                                                       }
+{           TInspector                                  }
+{           Author: Ernst Reidinga                      }
+{                                                       }
+{           Inspector like component with categories,   }
+{           inline editor and button. VCL Styles        }
+{           are supported.                              }
+{                                                       }
+{           Version: 1.0                                }
+{           Date   : 22/08/2023                         }
+{                                                       }
+{           Version History:                            }
+{           - 1.0.0.0                                   }
+{                                                       }
+{*******************************************************}
+
 unit Inspector;
 
 interface
@@ -281,8 +298,6 @@ type
     procedure WMSize(var Message: TWMSize); message WM_SIZE;
     procedure WMEraseBkGnd(var Msg: TWMEraseBkGnd); message WM_ERASEBKGND;
     procedure WMPaletteChanged(var Message: TMessage); message WM_PALETTECHANGED;
-    procedure CMMouseEnter(var Msg: TMessage); message CM_MOUSEENTER;
-    procedure CMMouseLeave(var Msg: TMessage); message CM_MOUSELEAVE;
     procedure WMSetFocus(var Message: TWMSetFocus); message WM_SETFOCUS;
     procedure WMKillFocus(var Message: TWMKillFocus); message WM_KILLFOCUS;
     procedure WMGetDLGCode(var Message: TWMGetDlgCode); message WM_GETDLGCODE;
@@ -847,7 +862,7 @@ begin
   FInspectorEditButton.Top := -100;
   FInspectorEditButton.Width  := ButtonWidth;
   FInspectorEditButton.Height := PropertyOptions.Height - 2;
-  FInspectorEditButton.Caption := '…';
+  FInspectorEditButton.Caption := 'â€¦';
   FInspectorEditButton.Parent  := Self;
   FInspectorEditButton.Visible := False;
   FInspectorEditButton.OnClick := OnPropertyEditorButtonClick;
@@ -1948,18 +1963,6 @@ begin
   UpdateRects;
   UpdateBuffer;
   Invalidate;
-end;
-
-procedure TInspector.CMMouseEnter(var Msg: TMessage);
-begin
-  // Todo
-  inherited;
-end;
-
-procedure TInspector.CMMouseLeave(var Msg: TMessage);
-begin
-  // Todo
-  inherited;
 end;
 
 procedure TInspector.WMSetFocus(var Message: TWMSetFocus);
