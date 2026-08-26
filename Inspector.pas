@@ -108,8 +108,11 @@ type
     /// <summary>Copies the public state from another inspector property.</summary>
     procedure Assign(Source: TPersistent); override;
 
+    /// <summary>Layout rectangle maintained by the owning inspector.</summary>
     property Rect: TRect read FRect write FRect;
+    /// <summary>Name-column selection rectangle maintained by the inspector.</summary>
     property SelectRect: TRect read FSelectRect write FSelectRect;
+    /// <summary>Value editor rectangle maintained by the inspector.</summary>
     property EditorRect: TRect read FEditorRect write FEditorRect;
   published
     /// <summary>Text displayed in the name column.</summary>
@@ -137,6 +140,7 @@ type
     /// <summary>Deep-copies another property collection.</summary>
     procedure Assign(Source: TPersistent); override;
 
+    /// <summary>Provides indexed access to the owned property items.</summary>
     property Items[Index: Integer]: TInspectorProperty read GetItem write SetItem; default;
     /// <summary>Raised after collection content changes.</summary>
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
@@ -164,7 +168,9 @@ type
 
     /// <summary>Deep-copies another category.</summary>
     procedure Assign(Source: TPersistent); override;
+    /// <summary>Header layout rectangle maintained by the owning inspector.</summary>
     property Rect: TRect read FRect write FRect;
+    /// <summary>Collapse-glyph hit rectangle maintained by the inspector.</summary>
     property CollapseRect: TRect read FCollapseRect write FCollapseRect;
   published
     /// <summary>Category header text.</summary>
@@ -190,6 +196,7 @@ type
     /// <summary>Deep-copies another category collection.</summary>
     procedure Assign(Source: TPersistent); override;
 
+    /// <summary>Provides indexed access to the owned category items.</summary>
     property Items[Index: Integer]: TInspectorCategory read GetItem write SetItem; default;
     /// <summary>Raised after collection content changes.</summary>
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
@@ -303,6 +310,7 @@ type
 
     /// <summary>Copies another splitter-options object.</summary>
     procedure Assign(Source: TPersistent); override;
+    /// <summary>Splitter hit rectangle maintained by the owning inspector.</summary>
     property Rect: TRect read FRect write FRect;
   published
     /// <summary>Notification used by the owning inspector when an option changes.</summary>
@@ -336,7 +344,6 @@ type
     FOldScrollPos : Integer;
     FScrollPos    : Integer;
     FUpdateCount  : Integer;
-    FOldHeight    : Integer;
 
     FSplitterMouseDown: Boolean;
     FSelectedMouseDown: Boolean;
@@ -455,6 +462,7 @@ type
     property TabStop default True;
   end;
 
+/// <summary>Registers TInspector on the ERDesigns component palette page.</summary>
 procedure Register;
 
 implementation
@@ -480,14 +488,17 @@ var
   Metrics: TTextMetric;
 begin
   DC := GetDC(0);
+  if DC = 0 then
+    Exit;
   try
     SaveFont := SelectObject(DC, Font.Handle);
-    GetTextMetrics(DC, Metrics);
-    SelectObject(DC, SaveFont);
+    if GetTextMetrics(DC, Metrics) then
+      Height := Max(1, Metrics.tmHeight);
+    if SaveFont <> 0 then
+      SelectObject(DC, SaveFont);
   finally
     ReleaseDC(0, DC);
   end;
-  Height := Metrics.tmHeight;
 end;
 
 procedure TInspectorPropertyEdit.UpdateEditorPosition(const Rect: TRect);
@@ -519,7 +530,7 @@ begin
   var RectCenter := Rect.Top + (Rect.Height div 2);
   var ButtonCenter := Height div 2;
   var NewLeft := Rect.Right - Width + MulDiv(TextOffset, CurrentPPI, 96);
-  var NewTop  := RectCenter - ButtonCenter + 1;
+  var NewTop := RectCenter - ButtonCenter + MulDiv(1, CurrentPPI, 96);
   if (Left <> NewLeft) then Left := NewLeft;
   if (Top <> NewTop) then Top := NewTop;
 end;
@@ -627,7 +638,6 @@ begin
     for Loop := 0 to LI.Count - 1 do Add.Assign(LI.Items[Loop]);
   end else
     inherited;
-  if Assigned(FOnChange) then FOnChange(Self);
 end;
 
 constructor TInspectorCategory.Create(Collection: TCollection);
@@ -724,7 +734,6 @@ begin
     for Loop := 0 to LI.Count - 1 do Add.Assign(LI.Items[Loop]);
   end else
     inherited;
-  if Assigned(FOnChange) then FOnChange(Self);
 end;
 
 constructor TInspectorCategoryOptions.Create;
@@ -992,15 +1001,26 @@ end;
 destructor TInspector.Destroy;
 begin
   FSelected := nil;
+  if Assigned(FCategories) then
+    FCategories.OnChange := nil;
+  if Assigned(FCategoryOptions) then
+    FCategoryOptions.OnChange := nil;
+  if Assigned(FPropertyOptions) then
+    FPropertyOptions.OnChange := nil;
+  if Assigned(FGutterOptions) then
+    FGutterOptions.OnChange := nil;
+  if Assigned(FSplitter) then
+    FSplitter.OnChange := nil;
+
   FInspectorEditButton.Free;
   FInspectorEdit.Free;
-  FBuffer.Free;
-  FItemBuffer.Free;
   FCategories.Free;
   FCategoryOptions.Free;
   FPropertyOptions.Free;
   FGutterOptions.Free;
   FSplitter.Free;
+  FBuffer.Free;
+  FItemBuffer.Free;
 
   inherited Destroy;
 end;
@@ -1280,11 +1300,11 @@ begin
   ScaledCategoryHeight := Scale(CategoryOptions.Height);
   ScaledPropertyHeight := Scale(PropertyOptions.Height);
   ScaledGutterWidth := Scale(GutterOptions.Width);
-  ScaledSplitterLeft := Scale(Splitter.Left);
   ScaledTextOffset := Scale(TextOffset);
   // Items Width
-  ItemsWidth := (ClientWidth - Scale(2)) - ScaledGutterWidth;
-  if ItemsWidth < 0 then itemsWidth := 0;
+  ItemsWidth := Max(0, (ClientWidth - Scale(2)) - ScaledGutterWidth);
+  ScaledSplitterLeft := EnsureRange(Scale(Splitter.Left), 0,
+    Max(0, ItemsWidth - Scale(ButtonWidth + TextOffset)));
   // Total Height
   TotalHeight := 0;
 
@@ -1309,7 +1329,7 @@ begin
       Categories.Items[Category].Properties.Items[&Property].Rect := TRect.Create(
         0,
         TotalHeight,
-        ClientWidth,
+        ItemsWidth,
         TotalHeight + PropertyHeight
       );
       Categories.Items[Category].Properties.Items[&Property].SelectRect := TRect.Create(
@@ -1486,70 +1506,53 @@ end;
 
 procedure TInspector.WndProc(var Message: TMessage);
 var
-  SI : TScrollInfo;
+  ScrollInfo: TScrollInfo;
 begin
-  case Message.Msg of
-    WM_GETDLGCODE:
-      Message.Result := Message.Result or DLGC_WANTARROWS or DLGC_WANTALLKEYS;
-    WM_KEYDOWN:
-    begin
-      case Message.wParam of
-        VK_PRIOR:
+  if Message.Msg = WM_KEYDOWN then
+    case Message.WParam of
+      VK_PRIOR:
+        begin
           Perform(WM_VSCROLL, SB_PAGEUP, 0);
-        VK_NEXT:
+          Message.Result := 0;
+          Exit;
+        end;
+      VK_NEXT:
+        begin
           Perform(WM_VSCROLL, SB_PAGEDOWN, 0);
-      end;
+          Message.Result := 0;
+          Exit;
+        end;
     end;
-    WM_VSCROLL:
-    begin
-      case Message.WParamLo of
-        SB_TOP:
+
+  if Message.Msg = WM_VSCROLL then
+  begin
+    case Message.WParamLo of
+      SB_TOP:
+        FScrollPos := 0;
+      SB_BOTTOM:
+        FScrollPos := FItemBuffer.Height - ClientHeight;
+      SB_LINEUP:
+        Dec(FScrollPos, Scale(PropertyOptions.Height));
+      SB_LINEDOWN:
+        Inc(FScrollPos, Scale(PropertyOptions.Height));
+      SB_PAGEUP:
+        Dec(FScrollPos, Max(1, ClientHeight - Scale(PropertyOptions.Height)));
+      SB_PAGEDOWN:
+        Inc(FScrollPos, Max(1, ClientHeight - Scale(PropertyOptions.Height)));
+      SB_THUMBPOSITION, SB_THUMBTRACK:
         begin
-          FScrollPos := 0;
-          ScrollPosUpdated;
+          ScrollInfo := Default(TScrollInfo);
+          ScrollInfo.cbSize := SizeOf(ScrollInfo);
+          ScrollInfo.fMask := SIF_TRACKPOS;
+          if GetScrollInfo(Handle, SB_VERT, ScrollInfo) then
+            FScrollPos := ScrollInfo.nTrackPos;
         end;
-        SB_BOTTOM:
-        begin
-          FScrollPos := FItemBuffer.Height - ClientHeight;
-          ScrollPosUpdated;
-        end;
-        SB_LINEUP:
-        begin
-          Dec(FScrollPos, Scale(PropertyOptions.Height));
-          ScrollPosUpdated;
-        end;
-        SB_LINEDOWN:
-        begin
-          Inc(FScrollPos, Scale(PropertyOptions.Height));
-          ScrollPosUpdated;
-        end;
-        SB_PAGEUP:
-        begin
-          Dec(FScrollPos, Max(1, ClientHeight - Scale(PropertyOptions.Height)));
-          ScrollPosUpdated;
-        end;
-        SB_PAGEDOWN:
-        begin
-          Inc(FScrollPos, Max(1, ClientHeight - Scale(PropertyOptions.Height)));
-          ScrollPosUpdated;
-        end;
-        SB_THUMBTRACK:
-        begin
-          if FInspectorEdit.Visible then FInspectorEdit.SetEditorInActive;
-          if FInspectorEditButton.Visible then FInspectorEditButton.SetEditorInActive;
-          ZeroMemory(@SI, sizeof(SI));
-          SI.cbSize := Sizeof(SI);
-          SI.fMask := SIF_TRACKPOS;
-          if GetScrollInfo(Handle, SB_VERT, SI) then
-          begin
-            FScrollPos := SI.nTrackPos;
-            ScrollPosUpdated;
-          end;
-        end;
-      end;
-      Message.Result := 0;
     end;
+    ScrollPosUpdated;
+    Message.Result := 0;
+    Exit;
   end;
+
   inherited;
 end;
 
@@ -1585,10 +1588,6 @@ var
   W, H : Integer;
   S    : TScrollInfo;
 begin
-  // Update the old height if it is changed
-  // this is used in the WM_SIZE to update the scroll position.
-  if (FOldHeight <> height) then FOldHeight := Height;
-
   X := FUpdateRect.Left;
   Y := FUpdateRect.Top;
   W := FUpdateRect.Right - FUpdateRect.Left;
@@ -1597,7 +1596,7 @@ begin
   S.cbSize := Sizeof(S);
   S.fMask  := SIF_ALL;
   S.nMin   := 0;
-  S.nMax   := FItemBuffer.Height;
+  S.nMax   := Max(0, FItemBuffer.Height - 1);
   S.nPage  := ClientHeight;
   S.nPos   := FScrollPos;
   S.nTrackPos := S.nPos;
@@ -1608,7 +1607,7 @@ begin
   if (W <> 0) and (H <> 0) then
     BitBlt(Canvas.Handle, X, Y, W, H, FBuffer.Canvas.Handle, X,  Y, SRCCOPY)
   else
-    BitBlt(Canvas.Handle, 0, 0, ClientWidth, ClientHeight, FBuffer.Canvas.Handle, X,  Y, SRCCOPY);
+    BitBlt(Canvas.Handle, 0, 0, ClientWidth, ClientHeight, FBuffer.Canvas.Handle, 0, 0, SRCCOPY);
 
   // Update position of editor
   if (Selected is TInspectorProperty) then
@@ -1800,8 +1799,10 @@ end;
 procedure TInspector.MouseDown(Button: TMouseButton; Shift: TShiftState; X: Integer; Y: Integer);
 var
   C, P: Integer;
+  ItemPoint: TPoint;
 begin
   if not Enabled then Exit;
+  ItemPoint := Point(X - Scale(GutterOptions.Width) - Scale(1), Y);
   if not Focused and CanFocus then SetFocus;
 
   // Reset selected
@@ -1841,7 +1842,7 @@ begin
   // Select property
   for C := 0 to Categories.Count -1 do
   for P := 0 to Categories.Items[C].Properties.Count -1 do
-  if PtInRect(ScrollOffsetRect(Categories.Items[C].Properties.Items[P].Rect), Point(X, Y)) then
+  if PtInRect(ScrollOffsetRect(Categories.Items[C].Properties.Items[P].Rect), ItemPoint) then
   begin
     Selected := Categories.Items[C].Properties.Items[P];
     FSelectedMouseDown := True;
@@ -1851,7 +1852,7 @@ begin
 
   // Select category
   for C := 0 to Categories.Count -1 do
-  if PtInRect(ScrollOffsetRect(Categories.Items[C].Rect), Point(X, Y)) then
+  if PtInRect(ScrollOffsetRect(Categories.Items[C].Rect), ItemPoint) then
   begin
     Selected := Categories.Items[C];
     FSelectedMouseDown := True;
@@ -1879,8 +1880,10 @@ end;
 procedure TInspector.MouseMove(Shift: TShiftState; X: Integer; Y: Integer);
 var
   C, P: Integer;
+  ItemPoint: TPoint;
 begin
   if not Enabled then Exit;
+  ItemPoint := Point(X - Scale(GutterOptions.Width) - Scale(1), Y);
 
   // We are dragging the splitter
   if FSplitterMouseDown then
@@ -1901,14 +1904,14 @@ begin
   begin
     for C := 0 to Categories.Count -1 do
     begin
-      if PtInRect(ScrollOffsetRect(Categories.Items[C].Rect), Point(X, Y)) and (Selected <> Categories.Items[C]) then
+      if PtInRect(ScrollOffsetRect(Categories.Items[C].Rect), ItemPoint) and (Selected <> Categories.Items[C]) then
       begin
         Selected := Categories.Items[C];
         Repaint;
         Exit;
       end else
       for P := 0 to Categories.Items[C].Properties.Count -1 do
-      if PtInRect(ScrollOffsetRect(Categories.Items[C].Properties.Items[P].Rect), Point(X, Y)) and (Selected <> Categories.Items[C].Properties.Items[P]) then
+      if PtInRect(ScrollOffsetRect(Categories.Items[C].Properties.Items[P].Rect), ItemPoint) and (Selected <> Categories.Items[C].Properties.Items[P]) then
       begin
         Selected := Categories.Items[C].Properties.Items[P];
         Repaint;
@@ -1927,7 +1930,6 @@ begin
     Result := inherited;
     Exit;
   end;
-  inherited;
   Result := True;
   if (ssCtrl in Shift) then
   begin
@@ -1947,7 +1949,6 @@ begin
     Result := inherited;
     Exit;
   end;
-  inherited;
   Result := True;
   if (ssCtrl in Shift) then
   begin
@@ -2155,16 +2156,19 @@ end;
 
 procedure TInspector.OnPropertyEditorExit(Sender: TObject);
 begin
-  if (FInspectorEdit.InspectorProperty <> nil) then
-  if Assigned(OnPropertyChanged) then OnPropertyChanged(FInspectorEdit.InspectorProperty);
+  if (FInspectorEdit.InspectorProperty <> nil) and
+    IsItemOwned(FInspectorEdit.InspectorProperty) and Assigned(OnPropertyChanged) then
+    OnPropertyChanged(FInspectorEdit.InspectorProperty);
 end;
 
 procedure TInspector.OnPropertyEditorChange(Sender: TObject);
 begin
   if FInspectorEditActive and (Selected is TInspectorProperty) then
   begin
-    (Selected as TInspectorProperty).Value := FInspectorEdit.Text;
-    if Assigned(OnPropertyChange) then OnPropertyChange(Selected as TInspectorProperty);
+    var InspectorProperty := TInspectorProperty(Selected);
+    InspectorProperty.Value := FInspectorEdit.Text;
+    if IsItemOwned(InspectorProperty) and Assigned(OnPropertyChange) then
+      OnPropertyChange(InspectorProperty);
   end;
 end;
 
@@ -2195,19 +2199,12 @@ end;
 procedure TInspector.WMSize(var Message: TWMSize);
 begin
   inherited;
-  // If the height is bigger than the old height, update the scroll position.
-  if (FScrollPos > 0) and (Height > FOldHeight) then
-  begin
-    FScrollPos := FScrollPos - (Height - FOldHeight);
-    ScrollPosUpdated;
-  end else
-
-  // Else just recalculate the rects, and redraw.
-  begin
-    UpdateRects;
-    UpdateBuffer;
-    Invalidate;
-  end;
+  UpdateRects;
+  FScrollPos := EnsureRange(FScrollPos, 0,
+    Max(0, FItemBuffer.Height - ClientHeight));
+  FOldScrollPos := FScrollPos;
+  UpdateBuffer;
+  Invalidate;
 end;
 
 procedure TInspector.WMEraseBkGnd(var Msg: TWMEraseBkgnd);
@@ -2239,6 +2236,7 @@ end;
 
 procedure TInspector.WMGetDLGCode(var Message: TWMGetDlgCode);
 begin
+  inherited;
   Message.Result := Message.Result or DLGC_WANTCHARS or
     DLGC_WANTARROWS or DLGC_WANTTAB or DLGC_WANTALLKEYS;
 end;
