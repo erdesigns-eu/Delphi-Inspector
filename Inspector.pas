@@ -20,7 +20,7 @@ unit Inspector;
 interface
 
 uses
-  WinApi.Windows, WinApi.Messages, System.SysUtils, System.Classes, Vcl.Controls,
+  WinApi.Windows, WinApi.Messages, System.SysUtils, System.Classes, System.Variants, Vcl.Controls,
   Vcl.Themes, Vcl.Graphics, System.Types, Vcl.StdCtrls;
 
 const
@@ -51,29 +51,42 @@ type
   TInspectorProperty = class;
   TInspectorCategory = class;
 
+  /// <summary>Event raised for a property item.</summary>
   TInspectorPropertyEvent = procedure(const &Property: TInspectorProperty) of object;
+  /// <summary>Event raised for a category item.</summary>
   TInspectorCategoryEvent = procedure(const Category: TInspectorCategory) of object;
 
+  /// <summary>Internal borderless editor used by TInspector.</summary>
   TInspectorPropertyEdit = class(TCustomEdit)
   private
     FInspectorProperty: TInspectorProperty;
   public
+    /// <summary>Creates the inline editor.</summary>
     constructor Create(AOwner: TComponent); override;
+    /// <summary>Identifies the property currently being edited.</summary>
     property InspectorProperty: TInspectorProperty read FInspectorProperty write FInspectorProperty;
-  public
+    /// <summary>Adjusts the editor height to its current font.</summary>
     procedure UpdateEditHeight;
+    /// <summary>Moves the editor into the supplied row rectangle.</summary>
     procedure UpdateEditorPosition(const Rect: TRect);
+    /// <summary>Shows the editor with the supplied text.</summary>
     procedure SetEditorActive(const Rect: TRect; const Value: string);
+    /// <summary>Hides the editor.</summary>
     procedure SetEditorInActive;
   end;
 
+  /// <summary>Internal ellipsis button used by edit-button properties.</summary>
   TInspectorPropertyEditButton = class(TButton)
   public
+    /// <summary>Moves the button into the supplied row rectangle.</summary>
     procedure UpdateEditorPosition(const Rect: TRect);
+    /// <summary>Shows the button in the supplied row rectangle.</summary>
     procedure SetEditorActive(const Rect: TRect);
+    /// <summary>Hides the button.</summary>
     procedure SetEditorInActive;
   end;
 
+  /// <summary>A named, Variant-valued row in an inspector category.</summary>
   TInspectorProperty = class(TCollectionItem)
   private
     FName: string;
@@ -90,19 +103,26 @@ type
   protected
     function GetDisplayName: string; override;
   public
+    /// <summary>Creates a property owned by Collection.</summary>
     constructor Create(Collection: TCollection); override;
+    /// <summary>Copies the public state from another inspector property.</summary>
     procedure Assign(Source: TPersistent); override;
 
     property Rect: TRect read FRect write FRect;
     property SelectRect: TRect read FSelectRect write FSelectRect;
     property EditorRect: TRect read FEditorRect write FEditorRect;
   published
+    /// <summary>Text displayed in the name column.</summary>
     property Name: string read FName write SetName;
+    /// <summary>Variant value displayed and edited as text; Null and Empty display blank.</summary>
     property Value: Variant read FValue write SetValue;
+    /// <summary>Shows an ellipsis button beside the inline editor.</summary>
     property EditButton: Boolean read FEditButton write SetEditButton default False;
+    /// <summary>Application-defined integer associated with this property.</summary>
     property Tag: Integer read FTag write FTag;
   end;
 
+  /// <summary>Owned collection of TInspectorProperty items.</summary>
   TInspectorPropertyCollection = class(TOwnedCollection)
   private
     FOnChange: TNotifyEvent;
@@ -112,13 +132,17 @@ type
   protected
     procedure Update(Item: TCollectionItem); override;
   public
+    /// <summary>Adds and returns a property item.</summary>
     function Add: TInspectorProperty;
+    /// <summary>Deep-copies another property collection.</summary>
     procedure Assign(Source: TPersistent); override;
 
     property Items[Index: Integer]: TInspectorProperty read GetItem write SetItem; default;
+    /// <summary>Raised after collection content changes.</summary>
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
   end;
 
+  /// <summary>A collapsible group containing inspector properties.</summary>
   TInspectorCategory = class(TCollectionItem)
   private
     FCaption: TCaption;
@@ -133,18 +157,25 @@ type
     procedure PropertiesChanged(Sender: TObject);
     function GetDisplayName: string; override;
   public
+    /// <summary>Creates a category and its owned property collection.</summary>
     constructor Create(Collection: TCollection); override;
+    /// <summary>Releases the owned property collection.</summary>
     destructor Destroy; override;
 
+    /// <summary>Deep-copies another category.</summary>
     procedure Assign(Source: TPersistent); override;
     property Rect: TRect read FRect write FRect;
     property CollapseRect: TRect read FCollapseRect write FCollapseRect;
   published
+    /// <summary>Category header text.</summary>
     property Caption: TCaption read FCaption write SetCaption;
+    /// <summary>Controls whether property rows are hidden.</summary>
     property Collapsed: Boolean read FCollapsed write SetCollapsed default False;
+    /// <summary>Properties owned by this category.</summary>
     property Properties: TInspectorPropertyCollection read FProperties write FProperties;
   end;
 
+  /// <summary>Owned collection of TInspectorCategory items.</summary>
   TInspectorCategoryCollection = class(TOwnedCollection)
   private
     FOnChange: TNotifyEvent;
@@ -154,13 +185,17 @@ type
   protected
     procedure Update(Item: TCollectionItem); override;
   public
+    /// <summary>Adds and returns a category item.</summary>
     function Add: TInspectorCategory;
+    /// <summary>Deep-copies another category collection.</summary>
     procedure Assign(Source: TPersistent); override;
 
     property Items[Index: Integer]: TInspectorCategory read GetItem write SetItem; default;
+    /// <summary>Raised after collection content changes.</summary>
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
   end;
 
+  /// <summary>Appearance settings for category headers.</summary>
   TInspectorCategoryOptions = class(TPersistent)
   private
     FOnChange: TNotifyEvent;
@@ -175,18 +210,27 @@ type
   protected
     procedure FontChanged(Sender: TObject);
   public
+    /// <summary>Creates category appearance defaults.</summary>
     constructor Create; virtual;
+    /// <summary>Releases the owned font.</summary>
     destructor Destroy; override;
 
+    /// <summary>Copies another category-options object.</summary>
     procedure Assign(Source: TPersistent); override;
   published
+    /// <summary>Notification used by the owning inspector when an option changes.</summary>
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    /// <summary>Logical category height at 96 DPI.</summary>
     property Height: Integer read FHeight write SetHeight default CategoryHeight;
+    /// <summary>Category background color.</summary>
     property Color: TColor read FColor write SetColor default CategoryColor;
+    /// <summary>Shows a focus rectangle around the selected category caption.</summary>
     property ShowFocusRect: Boolean read FShowFocusRect write SetShowFocusRect default True;
+    /// <summary>Category caption font.</summary>
     property Font: TFont read FFont write FFont;
   end;
 
+  /// <summary>Appearance settings for property rows.</summary>
   TInspectorPropertyOptions = class(TPersistent)
   private
     FOnChange: TNotifyEvent;
@@ -197,16 +241,23 @@ type
   protected
     procedure FontChanged(Sender: TObject);
   public
+    /// <summary>Creates property appearance defaults.</summary>
     constructor Create; virtual;
+    /// <summary>Releases the owned font.</summary>
     destructor Destroy; override;
 
+    /// <summary>Copies another property-options object.</summary>
     procedure Assign(Source: TPersistent); override;
   published
+    /// <summary>Notification used by the owning inspector when an option changes.</summary>
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    /// <summary>Logical property-row height at 96 DPI.</summary>
     property Height: Integer read FHeight write SetHeight default PropertyHeight;
+    /// <summary>Property name and value font.</summary>
     property Font: TFont read FFont write FFont;
   end;
 
+  /// <summary>Appearance settings for the category glyph gutter.</summary>
   TInspectorGutterOptions = class(TPersistent)
   private
     FOnChange: TNotifyEvent;
@@ -216,16 +267,23 @@ type
     procedure SetWidth(Width: Integer);
     procedure SetColor(Color: TColor);
   public
+    /// <summary>Creates gutter appearance defaults.</summary>
     constructor Create; virtual;
+    /// <summary>Destroys the options object.</summary>
     destructor Destroy; override;
 
+    /// <summary>Copies another gutter-options object.</summary>
     procedure Assign(Source: TPersistent); override;
   published
+    /// <summary>Notification used by the owning inspector when an option changes.</summary>
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    /// <summary>Logical gutter width at 96 DPI.</summary>
     property Width: Integer read FWidth write SetWidth default GutterWidth;
+    /// <summary>Gutter background color.</summary>
     property Color: TColor read FColor write SetColor default GutterColor;
   end;
 
+  /// <summary>Appearance and position settings for the column splitter.</summary>
   TInspectorSplitter = class(TPersistent)
   private
     FOnChange: TNotifyEvent;
@@ -238,19 +296,26 @@ type
     procedure SetCursor(Cursor: TCursor);
     procedure SetLeft(Left: Integer);
   public
-    public
+    /// <summary>Creates splitter defaults.</summary>
     constructor Create; virtual;
+    /// <summary>Destroys the splitter settings.</summary>
     destructor Destroy; override;
 
+    /// <summary>Copies another splitter-options object.</summary>
     procedure Assign(Source: TPersistent); override;
     property Rect: TRect read FRect write FRect;
   published
+    /// <summary>Notification used by the owning inspector when an option changes.</summary>
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    /// <summary>Splitter line color.</summary>
     property Color: TColor read FColor write SetColor default SplitterColor;
+    /// <summary>Mouse cursor shown over the splitter.</summary>
     property Cursor: TCursor read FCursor write SetCursor default SplitterCursor;
+    /// <summary>Logical name-column width at 96 DPI.</summary>
     property Left: Integer read FLeft write SetLeft default SplitterLeft;
   end;
 
+  /// <summary>A lightweight VCL property-grid control with collapsible categories.</summary>
   TInspector = class(TCustomControl)
   private
     class constructor Create;
@@ -284,7 +349,6 @@ type
     FSplitter: TInspectorSplitter;
 
     FInspectorEditActive: Boolean;
-    FInspectorEditButtonActive: Boolean;
     FInspectorEdit: TInspectorPropertyEdit;
     FInspectorEditButton: TInspectorPropertyEditButton;
 
@@ -293,6 +357,14 @@ type
     procedure OnPropertyEditorExit(Sender: TObject);
     procedure OnPropertyEditorChange(Sender: TObject);
     procedure OnPropertyEditorButtonClick(Sender: TObject);
+    /// <summary>Hides and disconnects both child editors.</summary>
+    procedure DeactivateEditor;
+    /// <summary>Safely converts a Variant to its displayed text.</summary>
+    function DisplayText(const Value: Variant): string;
+    /// <summary>Checks whether an item belongs to this inspector.</summary>
+    function IsItemOwned(const Item: TCollectionItem): Boolean;
+    /// <summary>Scales a 96-DPI logical dimension for the current monitor.</summary>
+    function Scale(const Value: Integer): Integer;
 
     procedure WMPaint(var Msg: TWMPaint); message WM_PAINT;
     procedure WMSize(var Message: TWMSize); message WM_SIZE;
@@ -329,32 +401,52 @@ type
     procedure DblClick; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
   public
+    /// <summary>Creates an empty inspector control.</summary>
     constructor Create(AOwner: TComponent); override;
+    /// <summary>Releases buffers, collections, options, and child editors.</summary>
     destructor Destroy; override;
 
+    /// <summary>Copies categories and appearance settings from another inspector.</summary>
     procedure Assign(Source: TPersistent); override;
 
+    /// <summary>Rebuilds the backing buffers and schedules a paint.</summary>
     procedure Repaint; override;
+    /// <summary>Defers visual updates until the matching EndUpdate call.</summary>
     procedure BeginUpdate; virtual;
+    /// <summary>Ends a deferred-update block.</summary>
     procedure EndUpdate; virtual;
+    /// <summary>Removes all categories and resets selection and scrolling.</summary>
     procedure Clear; virtual;
 
+    /// <summary>The currently selected category or property, or nil.</summary>
     property Selected: TCollectionItem read FSelected write SetSelected;
   published
+    /// <summary>Raised after a property is selected.</summary>
     property OnPropertySelect: TInspectorPropertyEvent read FOnPropertySelect write FOnPropertySelect;
+    /// <summary>Raised for each inline edit that changes the property value.</summary>
     property OnPropertyChange: TInspectorPropertyEvent read FOnPropertyChange write FOnPropertyChange;
+    /// <summary>Raised when the inline editor loses focus after editing.</summary>
     property OnPropertyChanged: TInspectorPropertyEvent read FOnPropertyChanged write FOnPropertyChanged;
+    /// <summary>Raised when an edit property's ellipsis button is clicked.</summary>
     property OnPropertyButtonClick: TInspectorPropertyEvent read FOnPropertyButtonClick write FOnPropertyButtonClick;
 
+    /// <summary>Raised after a category is selected.</summary>
     property OnCategorySelect: TInspectorCategoryEvent read FOnCategorySelect write FOnCategorySelect;
+    /// <summary>Raised when a category is collapsed with the mouse.</summary>
     property OnCategoryCollapse: TInspectorCategoryEvent read FOnCategoryCollapse write FOnCategoryCollapse;
+    /// <summary>Raised when a category is expanded with the mouse.</summary>
     property OnCategoryExpand: TInspectorCategoryEvent read FOnCategoryExpand write FOnCategoryExpand;
 
+    /// <summary>Categories displayed by the inspector.</summary>
     property Categories: TInspectorCategoryCollection read FCategories write FCategories;
+    /// <summary>Category header appearance.</summary>
     property CategoryOptions: TInspectorCategoryOptions read FCategoryOptions write FCategoryOptions;
+    /// <summary>Property row appearance.</summary>
     property PropertyOptions: TInspectorPropertyOptions read FPropertyOptions write FPropertyOptions;
 
+    /// <summary>Category gutter appearance.</summary>
     property GutterOptions: TInspectorGutterOptions read FGutterOptions write FGutterOptions;
+    /// <summary>Column splitter appearance and position.</summary>
     property Splitter: TInspectorSplitter read FSplitter write FSplitter;
 
     property Align;
@@ -410,7 +502,6 @@ end;
 
 procedure TInspectorPropertyEdit.SetEditorActive(const Rect: TRect; const Value: string);
 begin
-  if Assigned(OnExit) then OnExit(Self);
   Text := Value;
   SelectAll;
   UpdateEditorPosition(Rect);
@@ -427,7 +518,7 @@ procedure TInspectorPropertyEditButton.UpdateEditorPosition(const Rect: TRect);
 begin
   var RectCenter := Rect.Top + (Rect.Height div 2);
   var ButtonCenter := Height div 2;
-  var NewLeft := Rect.Right - Width + TextOffset;
+  var NewLeft := Rect.Right - Width + MulDiv(TextOffset, CurrentPPI, 96);
   var NewTop  := RectCenter - ButtonCenter + 1;
   if (Left <> NewLeft) then Left := NewLeft;
   if (Top <> NewTop) then Top := NewTop;
@@ -453,31 +544,43 @@ end;
 
 procedure TInspectorProperty.Assign(Source: TPersistent);
 begin
-  if (Source <> nil) and (Source is TInspectorProperty) then
+  if Source is TInspectorProperty then
   begin
-    FName       := (Source as TInspectorProperty).Name;
-    FValue      := (Source as TInspectorProperty).Value;
-    FEditButton := (Source as TInspectorProperty).EditButton;
-    FTag        := (Source as TInspectorProperty).Tag;
-  end;
+    FName := TInspectorProperty(Source).Name;
+    FValue := TInspectorProperty(Source).Value;
+    FEditButton := TInspectorProperty(Source).EditButton;
+    FTag := TInspectorProperty(Source).Tag;
+    Changed(False);
+  end
+  else
+    inherited;
 end;
 
 procedure TInspectorProperty.SetName(const Name: string);
 begin
-  FName := Name;
-  Changed(False);
+  if FName <> Name then
+  begin
+    FName := Name;
+    Changed(False);
+  end;
 end;
 
 procedure TInspectorProperty.SetValue(const Value: Variant);
 begin
-  FValue := Value;
-  Changed(False);
+  if not VarSameValue(FValue, Value) then
+  begin
+    FValue := Value;
+    Changed(False);
+  end;
 end;
 
 procedure TInspectorProperty.SetEditButton(const Button: Boolean);
 begin
-  FEditButton := Button;
-  Changed(False);
+  if FEditButton <> Button then
+  begin
+    FEditButton := Button;
+    Changed(False);
+  end;
 end;
 
 function TInspectorProperty.GetDisplayName: string;
@@ -501,13 +604,13 @@ end;
 function TInspectorPropertyCollection.Add: TInspectorProperty;
 begin
   Result := TInspectorProperty(inherited Add);
-  if Assigned(FOnChange) then FOnChange(Self);
 end;
 
 procedure TInspectorPropertyCollection.Update(Item: TCollectionItem);
 begin
   inherited Update(Item);
-  if Assigned(FOnChange) then FOnChange(Self);
+  if Assigned(FOnChange) then
+    FOnChange(Self);
 end;
 
 procedure TInspectorPropertyCollection.Assign(Source: TPersistent);
@@ -515,6 +618,8 @@ var
   LI   : TInspectorPropertyCollection;
   Loop : Integer;
 begin
+  if Source = Self then
+    Exit;
   if (Source is TInspectorPropertyCollection)  then
   begin
     LI := TInspectorPropertyCollection(Source);
@@ -542,12 +647,15 @@ end;
 
 procedure TInspectorCategory.Assign(Source: TPersistent);
 begin
-  if (Source <> nil) and (Source is TInspectorCategory) then
+  if Source is TInspectorCategory then
   begin
-    FCaption   := (Source as TInspectorCategory).Caption;
-    FCollapsed := (Source as TInspectorCategory).Collapsed;
-    FProperties.Assign((Source as TInspectorCategory).Properties);
-  end;
+    FCaption := TInspectorCategory(Source).Caption;
+    FCollapsed := TInspectorCategory(Source).Collapsed;
+    FProperties.Assign(TInspectorCategory(Source).Properties);
+    Changed(False);
+  end
+  else
+    inherited;
 end;
 
 procedure TInspectorCategory.SetCaption(const Caption: TCaption);
@@ -594,7 +702,6 @@ end;
 function TInspectorCategoryCollection.Add: TInspectorCategory;
 begin
   Result := TInspectorCategory(inherited Add);
-  if Assigned(FOnChange) then FOnChange(Self);
 end;
 
 procedure TInspectorCategoryCollection.Update(Item: TCollectionItem);
@@ -608,6 +715,8 @@ var
   LI   : TInspectorCategoryCollection;
   Loop : Integer;
 begin
+  if Source = Self then
+    Exit;
   if (Source is TInspectorCategoryCollection)  then
   begin
     LI := TInspectorCategoryCollection(Source);
@@ -637,14 +746,17 @@ end;
 
 procedure TInspectorCategoryOptions.Assign(Source: TPersistent);
 begin
-  inherited;
   if (Source is TInspectorCategoryOptions) then
   begin
-    FHeight        := (Source as TInspectorCategoryOptions).Height;
-    FColor         := (Source as TInspectorCategoryOptions).Color;
-    FShowFocusRect := (Source as TInspectorCategoryOptions).ShowFocusRect;
-    FFont.Assign((Source as TInspectorCategoryOptions).Font);
-  end;
+    FHeight := TInspectorCategoryOptions(Source).Height;
+    FColor := TInspectorCategoryOptions(Source).Color;
+    FShowFocusRect := TInspectorCategoryOptions(Source).ShowFocusRect;
+    FFont.Assign(TInspectorCategoryOptions(Source).Font);
+    if Assigned(FOnChange) then
+      FOnChange(Self);
+  end
+  else
+    inherited;
 end;
 
 procedure TInspectorCategoryOptions.FontChanged(Sender: TObject);
@@ -696,12 +808,15 @@ end;
 
 procedure TInspectorPropertyOptions.Assign(Source: TPersistent);
 begin
-  inherited;
   if (Source is TInspectorPropertyOptions) then
   begin
-    FHeight := (Source as TInspectorPropertyOptions).Height;
-    FFont.Assign((Source as TInspectorPropertyOptions).Font);
-  end;
+    FHeight := TInspectorPropertyOptions(Source).Height;
+    FFont.Assign(TInspectorPropertyOptions(Source).Font);
+    if Assigned(FOnChange) then
+      FOnChange(Self);
+  end
+  else
+    inherited;
 end;
 
 procedure TInspectorPropertyOptions.FontChanged(Sender: TObject);
@@ -733,12 +848,15 @@ end;
 
 procedure TInspectorGutterOptions.Assign(Source: TPersistent);
 begin
-  inherited;
   if (Source is TInspectorGutterOptions) then
   begin
-    FWidth  := (Source as TInspectorGutterOptions).Width;
-    FColor  := (Source as TInspectorGutterOptions).Color;
-  end;
+    FWidth := TInspectorGutterOptions(Source).Width;
+    FColor := TInspectorGutterOptions(Source).Color;
+    if Assigned(FOnChange) then
+      FOnChange(Self);
+  end
+  else
+    inherited;
 end;
 
 procedure TInspectorGutterOptions.SetWidth(Width: Integer);
@@ -775,13 +893,16 @@ end;
 
 procedure TInspectorSplitter.Assign(Source: TPersistent);
 begin
-  inherited;
   if (Source is TInspectorSplitter) then
   begin
-    FColor  := (Source as TInspectorSplitter).Color;
-    FCursor := (Source as TInspectorSplitter).Cursor;
-    FLeft   := (Source as TInspectorSplitter).Left;
-  end;
+    FColor := TInspectorSplitter(Source).Color;
+    FCursor := TInspectorSplitter(Source).Cursor;
+    FLeft := TInspectorSplitter(Source).Left;
+    if Assigned(FOnChange) then
+      FOnChange(Self);
+  end
+  else
+    inherited;
 end;
 
 procedure TInspectorSplitter.SetColor(Color: TColor);
@@ -860,8 +981,8 @@ begin
   FInspectorEditButton := TInspectorPropertyEditButton.Create(Self);
   FInspectorEditButton.Font.Assign(PropertyOptions.Font);
   FInspectorEditButton.Top := -100;
-  FInspectorEditButton.Width  := ButtonWidth;
-  FInspectorEditButton.Height := PropertyOptions.Height - 2;
+  FInspectorEditButton.Width := Scale(ButtonWidth);
+  FInspectorEditButton.Height := Max(1, Scale(PropertyOptions.Height) - Scale(2));
   FInspectorEditButton.Caption := '…';
   FInspectorEditButton.Parent  := Self;
   FInspectorEditButton.Visible := False;
@@ -870,6 +991,9 @@ end;
 
 destructor TInspector.Destroy;
 begin
+  FSelected := nil;
+  FInspectorEditButton.Free;
+  FInspectorEdit.Free;
   FBuffer.Free;
   FItemBuffer.Free;
   FCategories.Free;
@@ -878,27 +1002,34 @@ begin
   FGutterOptions.Free;
   FSplitter.Free;
 
-  FInspectorEdit.Free;
-  FInspectorEditButton.Free;
-
   inherited Destroy;
 end;
 
 procedure TInspector.Assign(Source: TPersistent);
 begin
-  inherited;
+  if Source = Self then
+    Exit;
   if (Source is TInspector) then
   begin
-    FCategories.Assign((Source as TInspector).Categories);
-    FCategoryOptions.Assign((Source as TInspector).CategoryOptions);
-    FPropertyOptions.Assign((Source as TInspector).PropertyOptions);
-    FGutterOptions.Assign((Source as TInspector).GutterOptions);
-    FSplitter.Assign((Source as TInspector).Splitter);
-  end;
+    BeginUpdate;
+    try
+      FCategories.Assign(TInspector(Source).Categories);
+      FCategoryOptions.Assign(TInspector(Source).CategoryOptions);
+      FPropertyOptions.Assign(TInspector(Source).PropertyOptions);
+      FGutterOptions.Assign(TInspector(Source).GutterOptions);
+      FSplitter.Assign(TInspector(Source).Splitter);
+    finally
+      EndUpdate;
+    end;
+  end
+  else
+    inherited;
 end;
 
 procedure TInspector.Repaint;
 begin
+  if FUpdateCount > -1 then
+    Exit;
   UpdateRects;
   UpdateBuffer;
   Invalidate;
@@ -911,6 +1042,8 @@ end;
 
 procedure TInspector.EndUpdate;
 begin
+  if FUpdateCount < 0 then
+    Exit;
   Dec(FUpdateCount);
   if (FUpdateCount <= -1) then
   begin
@@ -922,13 +1055,34 @@ end;
 
 procedure TInspector.Clear;
 begin
+  SetSelected(nil);
   FCategories.Clear;
   FScrollPos := 0;
   ScrollPosUpdated;
+  Repaint;
 end;
 
 procedure TInspector.CategoriesChanged(Sender: TObject);
+var
+  CategoryIndex: Integer;
+  PropertyIndex: Integer;
 begin
+  if (FSelected <> nil) and not IsItemOwned(FSelected) then
+  begin
+    FSelected := nil;
+    DeactivateEditor;
+  end;
+  if FSelected <> nil then
+    for CategoryIndex := 0 to Categories.Count - 1 do
+      if Categories[CategoryIndex].Collapsed then
+        for PropertyIndex := 0 to Categories[CategoryIndex].Properties.Count - 1 do
+          if Pointer(Categories[CategoryIndex].Properties[PropertyIndex]) = Pointer(FSelected) then
+          begin
+            SetSelected(Categories[CategoryIndex]);
+            Break;
+          end;
+  if FUpdateCount > -1 then
+    Exit;
   if (FItemBuffer.Height < ClientHeight) and (FScrollPos > 0) then
   begin
     FScrollPos := 0;
@@ -943,11 +1097,54 @@ end;
 procedure TInspector.OptionsChanged(Sender: TObject);
 begin
   FInspectorEdit.Font.Assign(PropertyOptions.Font);
+  FInspectorEdit.UpdateEditHeight;
   FInspectorEditButton.Font.Assign(PropertyOptions.Font);
-  FInspectorEditButton.Height := PropertyOptions.Height - 2;
+  FInspectorEditButton.Width := Scale(ButtonWidth);
+  FInspectorEditButton.Height := Max(1, Scale(PropertyOptions.Height) - Scale(2));
+  if FUpdateCount > -1 then
+    Exit;
   UpdateRects;
   UpdateBuffer;
   Invalidate;
+end;
+
+procedure TInspector.DeactivateEditor;
+begin
+  FInspectorEditActive := False;
+  FInspectorEdit.SetEditorInActive;
+  FInspectorEdit.InspectorProperty := nil;
+  FInspectorEditButton.SetEditorInActive;
+end;
+
+function TInspector.DisplayText(const Value: Variant): string;
+begin
+  if VarIsNull(Value) or VarIsEmpty(Value) then
+    Result := ''
+  else
+    Result := VarToStr(Value);
+end;
+
+function TInspector.IsItemOwned(const Item: TCollectionItem): Boolean;
+var
+  CategoryIndex: Integer;
+  PropertyIndex: Integer;
+begin
+  Result := False;
+  if Item = nil then
+    Exit;
+  for CategoryIndex := 0 to Categories.Count - 1 do
+  begin
+    if Pointer(Categories[CategoryIndex]) = Pointer(Item) then
+      Exit(True);
+    for PropertyIndex := 0 to Categories[CategoryIndex].Properties.Count - 1 do
+      if Pointer(Categories[CategoryIndex].Properties[PropertyIndex]) = Pointer(Item) then
+        Exit(True);
+  end;
+end;
+
+function TInspector.Scale(const Value: Integer): Integer;
+begin
+  Result := MulDiv(Value, CurrentPPI, 96);
 end;
 
 procedure TInspector.UpdateRects;
@@ -955,20 +1152,20 @@ procedure TInspector.UpdateRects;
   function CategoryTextRectOffset(const Rect: TRect): TRect;
   begin
     Result := TRect.Create(Rect);
-    Result.Left := Result.Left + TextOffset;
+    Result.Left := Result.Left + Scale(TextOffset);
   end;
 
   function PropertyTextRectOffset(const Rect: TRect): TRect;
   begin
     Result := TRect.Create(Rect);
-    Result.Left  := Result.Left + TextOffset;
-    Result.Right := Splitter.Left;
+    Result.Left  := Result.Left + Scale(TextOffset);
+    Result.Right := Scale(Splitter.Left);
   end;
 
   function PropertyValueRectOffset(const Rect: TRect): TRect;
   begin
     Result := TRect.Create(Rect);
-    Result.Left  := Result.Left + TextOffset;
+    Result.Left  := Result.Left + Scale(TextOffset);
   end;
 
   procedure FillItemBufferBackground;
@@ -1004,7 +1201,10 @@ procedure TInspector.UpdateRects;
     begin
       Brush.Color := S.GetSystemColor(CategoryOptions.Color);
       Font.Assign(CategoryOptions.Font);
-      Font.Color := S.GetSystemColor(CategoryOptions.Font.Color);
+      if Enabled then
+        Font.Color := S.GetSystemColor(CategoryOptions.Font.Color)
+      else
+        Font.Color := S.GetSystemColor(clGrayText);
       FillRect(Category.Rect);
       var CaptionRect := CategoryTextRectOffset(Category.Rect);
       DrawText(FItemBuffer.Canvas.Handle, Category.Caption, Length(Category.Caption), CaptionRect, DT_SINGLELINE or DT_VCENTER or DT_LEFT or DT_END_ELLIPSIS);
@@ -1012,8 +1212,8 @@ procedure TInspector.UpdateRects;
       begin
         var FocusRect := CategoryTextRectOffset(Category.Rect);
         DrawText(FItemBuffer.Canvas.Handle, Category.Caption, Length(Category.Caption), FocusRect, DT_SINGLELINE or DT_VCENTER or DT_LEFT or DT_END_ELLIPSIS or DT_CALCRECT);
-        FocusRect.Top := FocusRect.Top + 4;
-        InflateRect(FocusRect, 2, 2);
+        FocusRect.Top := FocusRect.Top + Scale(4);
+        InflateRect(FocusRect, Scale(2), Scale(2));
         DrawFocusRect(FocusRect);
       end;
     end;
@@ -1027,7 +1227,7 @@ procedure TInspector.UpdateRects;
     with FItemBuffer.Canvas do
     begin
       // Property name
-      if (Selected = &Property) then
+      if (Selected = &Property) and Enabled then
       begin
         Brush.Style := bsSolid;
         Font.Assign(PropertyOptions.Font);
@@ -1041,18 +1241,24 @@ procedure TInspector.UpdateRects;
       begin
         Brush.Style := bsClear;
         Font.Assign(PropertyOptions.Font);
-        Font.Color := S.GetSystemColor(PropertyOptions.Font.Color);
+        if Enabled then
+          Font.Color := S.GetSystemColor(PropertyOptions.Font.Color)
+        else
+          Font.Color := S.GetSystemColor(clGrayText);
         var NameRect := PropertyTextRectOffset(&Property.SelectRect);
         DrawText(FItemBuffer.Canvas.Handle, &Property.Name, Length(&Property.Name), NameRect, DT_SINGLELINE or DT_VCENTER or DT_LEFT);
       end;
 
       Brush.Style := bsClear;
       Font.Assign(PropertyOptions.Font);
-      Font.Color := S.GetSystemColor(PropertyOptions.Font.Color);
+      if Enabled then
+        Font.Color := S.GetSystemColor(PropertyOptions.Font.Color)
+      else
+        Font.Color := S.GetSystemColor(clGrayText);
 
       // Property value
       var ValueRect := PropertyValueRectOffset(&Property.EditorRect);
-      var PropertyValue := &Property.Value;
+      var PropertyValue := DisplayText(&Property.Value);
       DrawText(FItemBuffer.Canvas.Handle, PropertyValue, Length(PropertyValue), ValueRect, DT_SINGLELINE or DT_VCENTER or DT_LEFT);
 
       Pen.Color := S.GetSystemColor(Splitter.Color);
@@ -1061,16 +1267,23 @@ procedure TInspector.UpdateRects;
       MoveTo(&Property.Rect.Left, &Property.Rect.Bottom);
       LineTo(&Property.Rect.Right, &Property.Rect.Bottom);
       // Splitter
-      MoveTo(Splitter.Left, &Property.Rect.Top);
-      LineTo(Splitter.Left, &Property.Rect.Bottom);
+      MoveTo(Scale(Splitter.Left), &Property.Rect.Top);
+      LineTo(Scale(Splitter.Left), &Property.Rect.Bottom);
     end;
   end;
 
 var
   ItemsWidth, TotalHeight, Category, &Property, PropertyHeight: Integer;
+  ScaledCategoryHeight, ScaledGutterWidth, ScaledPropertyHeight: Integer;
+  ScaledSplitterLeft, ScaledTextOffset: Integer;
 begin
+  ScaledCategoryHeight := Scale(CategoryOptions.Height);
+  ScaledPropertyHeight := Scale(PropertyOptions.Height);
+  ScaledGutterWidth := Scale(GutterOptions.Width);
+  ScaledSplitterLeft := Scale(Splitter.Left);
+  ScaledTextOffset := Scale(TextOffset);
   // Items Width
-  ItemsWidth := (ClientWidth - 2) - GutterOptions.Width;
+  ItemsWidth := (ClientWidth - Scale(2)) - ScaledGutterWidth;
   if ItemsWidth < 0 then itemsWidth := 0;
   // Total Height
   TotalHeight := 0;
@@ -1082,17 +1295,17 @@ begin
       0,
       TotalHeight,
       ItemsWidth,
-      TotalHeight + CategoryOptions.Height
+      TotalHeight + ScaledCategoryHeight
     );
-    Inc(TotalHeight, CategoryOptions.Height);
+    Inc(TotalHeight, ScaledCategoryHeight);
     // Loop over properties
     for &Property := 0 to Categories.Items[Category].Properties.Count -1 do
     begin
       if not Categories.Items[Category].Collapsed then
-        PropertyHeight := PropertyOptions.Height
+        PropertyHeight := ScaledPropertyHeight
       else
         propertyHeight := 0;
-      
+
       Categories.Items[Category].Properties.Items[&Property].Rect := TRect.Create(
         0,
         TotalHeight,
@@ -1102,16 +1315,16 @@ begin
       Categories.Items[Category].Properties.Items[&Property].SelectRect := TRect.Create(
         0,
         TotalHeight,
-        Splitter.Left,
+        ScaledSplitterLeft,
         TotalHeight + PropertyHeight
       );
       Categories.Items[Category].Properties.Items[&Property].EditorRect := TRect.Create(
-        Splitter.Left + 1,
+        ScaledSplitterLeft + Scale(1),
         TotalHeight,
-        ItemsWidth - TextOffset,
+        Max(ScaledSplitterLeft + Scale(1), ItemsWidth - ScaledTextOffset),
         TotalHeight + PropertyHeight
       );
-      if not Categories.Items[Category].Collapsed then Inc(TotalHeight, PropertyOptions.Height);
+      if not Categories.Items[Category].Collapsed then Inc(TotalHeight, ScaledPropertyHeight);
     end;
   end;
 
@@ -1119,7 +1332,7 @@ begin
   Inc(TotalHeight, 1);
 
   // Update ItemBuffer dimensions
-  FItemBuffer.SetSize(ItemsWidth, TotalHeight);
+  FItemBuffer.SetSize(Max(1, ItemsWidth), Max(1, TotalHeight));
 
   // Fill ItemBuffer background
   FillItemBufferBackground;
@@ -1135,11 +1348,11 @@ begin
   end;
 
   // Update splitter rect
-  var SplitterCenter := 1 + GutterOptions.Width + Splitter.Left;
+  var SplitterCenter := Scale(1) + ScaledGutterWidth + ScaledSplitterLeft;
   Splitter.Rect := TRect.Create(
-    SplitterCenter - 2,
+    SplitterCenter - Scale(2),
     ClientRect.Top + 1,
-    SplitterCenter + 2,
+    SplitterCenter + Scale(2),
     ClientRect.Bottom - 1
   );
 end;
@@ -1196,12 +1409,12 @@ procedure TInspector.UpdateBuffer;
         D := S.GetElementDetails(tcbCategoryGlyphClosed)
       else
         D := S.GetElementDetails(tcbCategoryGlyphOpened);
-      var CategoryTop  := (Category.Rect.Top + 2) - FScrollPos;
+      var CategoryTop  := (Category.Rect.Top + Scale(2)) - FScrollPos;
       Category.CollapseRect := TRect.Create(
-        2,
+        Scale(2),
         CategoryTop,
-        GutterOptions.Width,
-        CategoryTop + CategoryOptions.Height
+        Scale(GutterOptions.Width),
+        CategoryTop + Scale(CategoryOptions.Height)
       );
       S.DrawElement(FBuffer.Canvas.Handle, D, Category.CollapseRect);
     end;
@@ -1218,7 +1431,8 @@ procedure TInspector.UpdateBuffer;
     begin
       Brush.Color := S.GetSystemColor(GutterOptions.Color);
       Brush.Style := bsSolid;
-      R := TRect.Create(1, 1, GutterOptions.Width + 1, ClientHeight - 2);
+      R := TRect.Create(Scale(1), Scale(1), Scale(GutterOptions.Width) + Scale(1),
+        ClientHeight - Scale(2));
       FillRect(R);
       for I := 0 to Categories.Count -1 do
       DrawCategoryButton(Categories.Items[I]);
@@ -1235,7 +1449,7 @@ begin
 
   // Update buffer dimensions
   if (FBuffer.Width <> ClientWidth) or (FBuffer.Height <> ClientHeight) then
-    FBuffer.SetSize(ClientWidth, ClientHeight);
+    FBuffer.SetSize(Max(1, ClientWidth), Max(1, ClientHeight));
 
   // Draw Background
   DrawControlBackground;
@@ -1254,7 +1468,7 @@ begin
   with FBuffer.Canvas do
   begin
     // Draw 1px (border) left and 1px (border) + ScrollPos top.
-    Draw(GutterOptions.Width + 1, 1 - FScrollPos, FItemBuffer);
+    Draw(Scale(GutterOptions.Width) + Scale(1), Scale(1) - FScrollPos, FItemBuffer);
   end;
 
   // REMOVE CLIPRECT
@@ -1301,12 +1515,22 @@ begin
         end;
         SB_LINEUP:
         begin
-          dec(FScrollPos, PropertyOptions.Height);
+          Dec(FScrollPos, Scale(PropertyOptions.Height));
           ScrollPosUpdated;
         end;
         SB_LINEDOWN:
         begin
-          Inc(FScrollPos, PropertyOptions.Height);
+          Inc(FScrollPos, Scale(PropertyOptions.Height));
+          ScrollPosUpdated;
+        end;
+        SB_PAGEUP:
+        begin
+          Dec(FScrollPos, Max(1, ClientHeight - Scale(PropertyOptions.Height)));
+          ScrollPosUpdated;
+        end;
+        SB_PAGEDOWN:
+        begin
+          Inc(FScrollPos, Max(1, ClientHeight - Scale(PropertyOptions.Height)));
           ScrollPosUpdated;
         end;
         SB_THUMBTRACK:
@@ -1320,7 +1544,6 @@ begin
           begin
             FScrollPos := SI.nTrackPos;
             ScrollPosUpdated;
-            ScrollPosUpdated;
           end;
         end;
       end;
@@ -1332,7 +1555,7 @@ end;
 
 procedure TInspector.ScrollPosUpdated;
 begin
-  FScrollPos := EnsureRange(FScrollPos, 0, FItemBuffer.Height - ClientHeight);
+  FScrollPos := EnsureRange(FScrollPos, 0, Max(0, FItemBuffer.Height - ClientHeight));
   if FOldScrollPos <> FScrollPos then
   begin
     FOldScrollPos := FScrollPos;
@@ -1353,8 +1576,8 @@ procedure TInspector.Paint;
   function OffsetEditorRect(const Rect: TRect): TRect;
   begin
     Result := TRect.Create(Rect);
-    Result.Width := Result.Width - TextOffset;
-    OffsetRect(Result, GutterOptions.Width + TextOffset + 1, 0);
+    Result.Width := Max(0, Result.Width - Scale(TextOffset));
+    OffsetRect(Result, Scale(GutterOptions.Width + TextOffset + 1), 0);
   end;
 
 var
@@ -1417,7 +1640,7 @@ procedure TInspector.SelectPrevious;
       begin
         if ScrollOffsetRect((Selected as TInspectorCategory).Rect).Top < 0 then
         begin
-          Dec(FScrollPos, CategoryOptions.Height);
+          Dec(FScrollPos, Scale(CategoryOptions.Height));
           ScrollPosUpdated;
           Exit;
         end;
@@ -1427,7 +1650,7 @@ procedure TInspector.SelectPrevious;
       begin
         if ScrollOffsetRect((Selected as TInspectorProperty).Rect).Top < 0 then
         begin
-          Dec(FScrollPos, PropertyOptions.Height);
+          Dec(FScrollPos, Scale(PropertyOptions.Height));
           ScrollPosUpdated;
           Exit;
         end;
@@ -1502,7 +1725,7 @@ procedure TInspector.SelectNext;
       begin
         if ScrollOffsetRect((Selected as TInspectorCategory).Rect).Bottom > ClientHeight then
         begin
-          Inc(FScrollPos, CategoryOptions.Height);
+          Inc(FScrollPos, Scale(CategoryOptions.Height));
           ScrollPosUpdated;
           Exit;
         end;
@@ -1512,7 +1735,7 @@ procedure TInspector.SelectNext;
       begin
         if ScrollOffsetRect((Selected as TInspectorProperty).Rect).Bottom > ClientHeight then
         begin
-          Inc(FScrollPos, PropertyOptions.Height);
+          Inc(FScrollPos, Scale(PropertyOptions.Height));
           ScrollPosUpdated;
           Exit;
         end;
@@ -1662,7 +1885,8 @@ begin
   // We are dragging the splitter
   if FSplitterMouseDown then
   begin
-    Splitter.Left := X - (1 + GutterOptions.Width);
+    Splitter.Left := Max(0, MulDiv(X - Scale(1 + GutterOptions.Width), 96,
+      CurrentPPI));
   end;
 
   // Mouse is over splitter
@@ -1703,6 +1927,7 @@ begin
     Result := inherited;
     Exit;
   end;
+  inherited;
   Result := True;
   if (ssCtrl in Shift) then
   begin
@@ -1710,10 +1935,9 @@ begin
   end else
   if (FItemBuffer.Height > ClientHeight) then
   begin
-    Inc(FScrollPos, PropertyOptions.Height);
+    Inc(FScrollPos, Scale(PropertyOptions.Height));
     ScrollPosUpdated;
   end;
-  inherited;
 end;
 
 function TInspector.DoMouseWheelUp(Shift: TShiftState; MousePos: TPoint): Boolean;
@@ -1723,6 +1947,7 @@ begin
     Result := inherited;
     Exit;
   end;
+  inherited;
   Result := True;
   if (ssCtrl in Shift) then
   begin
@@ -1730,10 +1955,9 @@ begin
   end else
   if (FItemBuffer.Height > ClientHeight) then
   begin
-    Dec(FScrollPos, PropertyOptions.Height);
+    Dec(FScrollPos, Scale(PropertyOptions.Height));
     ScrollPosUpdated;
   end;
-  inherited;
 end;
 
 procedure TInspector.DblClick;
@@ -1760,9 +1984,14 @@ begin
   // Collapse / Expand category
   if MouseButton = mbLeft then
   for Category := 0 to Categories.Count -1 do
-  if PtInRect(Categories.Items[Category].Rect, MousePosition) then
+  if PtInRect(ScrollOffsetRect(Categories.Items[Category].Rect),
+    Point(MousePosition.X - Scale(GutterOptions.Width) - Scale(1), MousePosition.Y)) then
   begin
     Categories.Items[Category].Collapsed := not Categories.Items[Category].Collapsed;
+    if Categories.Items[Category].Collapsed and Assigned(OnCategoryCollapse) then
+      OnCategoryCollapse(Categories.Items[Category])
+    else if Assigned(OnCategoryExpand) then
+      OnCategoryExpand(Categories.Items[Category]);
     Break;
   end;
 end;
@@ -1818,7 +2047,8 @@ begin
     if (Categories.Count > 0) then
     begin
       var LastCategory := Categories.Count -1;
-      if Categories.Items[LastCategory].Properties.Count > 0 then
+      if not Categories.Items[LastCategory].Collapsed and
+        (Categories.Items[LastCategory].Properties.Count > 0) then
       begin
         var LastProperty := Categories.Items[LastCategory].Properties.Count -1;
         Selected := Categories.Items[LastCategory].Properties.Items[LastProperty];
@@ -1849,20 +2079,21 @@ procedure TInspector.SetSelected(const Item: TCollectionItem);
   function OffsetEditorRect(const Rect: TRect): TRect;
   begin
     Result := TRect.Create(Rect);
-    Result.Width := Result.Width - TextOffset;
-    OffsetRect(Result, GutterOptions.Width + TextOffset + 1, 0);
+    Result.Width := Max(0, Result.Width - Scale(TextOffset));
+    OffsetRect(Result, Scale(GutterOptions.Width + TextOffset + 1), 0);
   end;
 
 begin
+  if (Item <> nil) and not IsItemOwned(Item) then
+    Exit;
+  if FSelected = Item then
+    Exit;
+
+  DeactivateEditor;
   FSelected := Item;
 
   if (Item = nil) or (Item is TInspectorCategory) then
   begin
-    FInspectorEdit.SetEditorInActive;
-    FInspectorEditActive := False;
-    FInspectorEditButton.SetEditorInActive;
-    FInspectorEditButtonActive := False;
-
     if (Item is TInspectorCategory) and Assigned(OnCategorySelect) then
       OnCategorySelect(Selected as TInspectorCategory);
 
@@ -1876,21 +2107,23 @@ begin
     var EditorRect := OffsetEditorRect(&Property.EditorRect);
 
     if Assigned(OnPropertySelect) then OnPropertySelect(Item as TInspectorProperty);
+    if (FSelected <> Item) or not IsItemOwned(FSelected) then
+    begin
+      FSelected := nil;
+      Exit;
+    end;
 
     if &Property.EditButton then
     begin
-      EditorRect.Right := EditorRect.Right - ButtonWidth;
+      EditorRect.Right := EditorRect.Right - Scale(ButtonWidth);
       FInspectorEditButton.SetEditorActive(OffsetEditorRect(&Property.EditorRect));
-      FInspectorEditButtonActive := True;
     end else
     begin
       FInspectorEditButton.SetEditorInActive;
-      FInspectorEditButtonActive := False;
     end;
 
-    FInspectorEdit.SetEditorInActive;
     FInspectorEdit.InspectorProperty := &Property;
-    FInspectorEdit.SetEditorActive(EditorRect, &Property.Value);
+    FInspectorEdit.SetEditorActive(EditorRect, DisplayText(&Property.Value));
     FInspectorEditActive := True;
   end;
 end;
@@ -1901,7 +2134,22 @@ begin
   begin
     KeyDown(Key, Shift);
     Key := 0;
-  end else
+  end
+  else if Key = VK_RETURN then
+  begin
+    DeactivateEditor;
+    if CanFocus then
+      SetFocus;
+    Repaint;
+    Key := 0;
+  end
+  else if Key = VK_ESCAPE then
+  begin
+    SetSelected(nil);
+    Repaint;
+    Key := 0;
+  end
+  else
     inherited;
 end;
 
@@ -1913,7 +2161,7 @@ end;
 
 procedure TInspector.OnPropertyEditorChange(Sender: TObject);
 begin
-  if (Selected is TInspectorProperty) then
+  if FInspectorEditActive and (Selected is TInspectorProperty) then
   begin
     (Selected as TInspectorProperty).Value := FInspectorEdit.Text;
     if Assigned(OnPropertyChange) then OnPropertyChange(Selected as TInspectorProperty);
@@ -1923,7 +2171,19 @@ end;
 procedure TInspector.OnPropertyEditorButtonClick(Sender: TObject);
 begin
   if (Selected is TInspectorProperty) then
-  if Assigned(OnPropertyButtonClick) then OnPropertyButtonClick(Selected as TInspectorProperty);
+  begin
+    if Assigned(OnPropertyButtonClick) then
+      OnPropertyButtonClick(Selected as TInspectorProperty);
+    if (Selected = nil) or not IsItemOwned(Selected) then
+      Exit;
+    FInspectorEditActive := False;
+    try
+      FInspectorEdit.Text := DisplayText(TInspectorProperty(Selected).Value);
+      FInspectorEdit.SelectAll;
+    finally
+      FInspectorEditActive := True;
+    end;
+  end;
 end;
 
 procedure TInspector.WMPaint(var Msg: TWMPaint);
@@ -1977,7 +2237,7 @@ begin
   Repaint;
 end;
 
-procedure TInspector.WMGetDLGCode(var Message: TWMNoParams);
+procedure TInspector.WMGetDLGCode(var Message: TWMGetDlgCode);
 begin
   Message.Result := Message.Result or DLGC_WANTCHARS or
     DLGC_WANTARROWS or DLGC_WANTTAB or DLGC_WANTALLKEYS;
@@ -1986,6 +2246,8 @@ end;
 procedure TInspector.CMEnabledChanged(var Message: TMessage);
 begin
   inherited;
+  if not Enabled then
+    DeactivateEditor;
   Repaint;
 end;
 

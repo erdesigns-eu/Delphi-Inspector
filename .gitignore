@@ -1,0 +1,34 @@
+# Delphi compiler output
+*.dcu
+*.exe
+*.dll
+*.bpl
+*.dcp
+*.map
+*.tds
+*.rsm
+*.local
+*.identcache
+*.projdata
+*.stat
+
+# IDE and user-local files
+*.dsk
+*.dproj.local
+*.groupproj.local
+*.deployproj.local
+__history/
+*.~*
+
+# Common build directories
+Win32/
+Win64/
+OSX32/
+OSX64/
+Android/
+Android64/
+iOSDevice32/
+iOSDevice64/
+Linux64/
+Debug/
+Release/
