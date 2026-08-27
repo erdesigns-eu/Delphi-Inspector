@@ -176,3 +176,5 @@ Additional screenshots are available in the repository:
 ## License
 
 Delphi Inspector is available under the [MIT License](LICENSE).
+
+Copyright © 2023–2026 ERDesigns - Ernst Reidinga
