@@ -19,8 +19,14 @@ type
     procedure PropertySelected(const AProperty: TInspectorProperty);
     /// <summary>Reports completed inline edits below the inspector.</summary>
     procedure PropertyChanged(const AProperty: TInspectorProperty);
+    /// <summary>Reports live inline edits below the inspector.</summary>
+    procedure PropertyChanging(const AProperty: TInspectorProperty);
     /// <summary>Demonstrates handling an edit-button property.</summary>
     procedure PropertyButtonClick(const AProperty: TInspectorProperty);
+    /// <summary>Reports that a category was collapsed.</summary>
+    procedure CategoryCollapsed(const ACategory: TInspectorCategory);
+    /// <summary>Reports that a category was expanded.</summary>
+    procedure CategoryExpanded(const ACategory: TInspectorCategory);
     /// <summary>Adds one property to a category.</summary>
     procedure AddProperty(const ACategory: TInspectorCategory; const AName: string;
       const AValue: Variant; const AEditButton: Boolean = False);
@@ -68,8 +74,11 @@ begin
   FInspector.Parent := Self;
   FInspector.Align := alClient;
   FInspector.OnPropertySelect := PropertySelected;
+  FInspector.OnPropertyChange := PropertyChanging;
   FInspector.OnPropertyChanged := PropertyChanged;
   FInspector.OnPropertyButtonClick := PropertyButtonClick;
+  FInspector.OnCategoryCollapse := CategoryCollapsed;
+  FInspector.OnCategoryExpand := CategoryExpanded;
 
   FInspector.BeginUpdate;
   try
@@ -116,6 +125,12 @@ begin
   FStatus.Caption := 'Changed: ' + AProperty.Name;
 end;
 
+procedure TMainForm.PropertyChanging(const AProperty: TInspectorProperty);
+begin
+  FStatus.Caption := 'Editing: ' + AProperty.Name + ' = ' +
+    VarToStr(AProperty.Value);
+end;
+
 procedure TMainForm.PropertyButtonClick(const AProperty: TInspectorProperty);
 var
   NewValue: string;
@@ -123,6 +138,16 @@ begin
   NewValue := VarToStr(AProperty.Value);
   if InputQuery('Edit ' + AProperty.Name, 'Value', NewValue) then
     AProperty.Value := NewValue;
+end;
+
+procedure TMainForm.CategoryCollapsed(const ACategory: TInspectorCategory);
+begin
+  FStatus.Caption := 'Collapsed: ' + ACategory.Caption;
+end;
+
+procedure TMainForm.CategoryExpanded(const ACategory: TInspectorCategory);
+begin
+  FStatus.Caption := 'Expanded: ' + ACategory.Caption;
 end;
 
 end.

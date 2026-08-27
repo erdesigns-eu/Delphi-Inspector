@@ -359,6 +359,10 @@ type
     FInspectorEdit: TInspectorPropertyEdit;
     FInspectorEditButton: TInspectorPropertyEditButton;
 
+    /// <summary>Returns the selected item as a property, or nil.</summary>
+    function GetSelectedProperty: TInspectorProperty;
+    /// <summary>Returns the selected item as a category, or nil.</summary>
+    function GetSelectedCategory: TInspectorCategory;
     procedure SetSelected(const Item: TCollectionItem);
     procedure OnPropertyEditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure OnPropertyEditorExit(Sender: TObject);
@@ -424,9 +428,19 @@ type
     procedure EndUpdate; virtual;
     /// <summary>Removes all categories and resets selection and scrolling.</summary>
     procedure Clear; virtual;
+    /// <summary>Expands every category and performs a single visual update.</summary>
+    procedure ExpandAll; virtual;
+    /// <summary>Collapses every category and performs a single visual update.</summary>
+    procedure CollapseAll; virtual;
+    /// <summary>Scrolls the current selection into the visible client area.</summary>
+    procedure EnsureSelectedVisible; virtual;
 
     /// <summary>The currently selected category or property, or nil.</summary>
     property Selected: TCollectionItem read FSelected write SetSelected;
+    /// <summary>The selected property, or nil when a category or nothing is selected.</summary>
+    property SelectedProperty: TInspectorProperty read GetSelectedProperty;
+    /// <summary>The selected category, or nil when a property or nothing is selected.</summary>
+    property SelectedCategory: TInspectorCategory read GetSelectedCategory;
   published
     /// <summary>Raised after a property is selected.</summary>
     property OnPropertySelect: TInspectorPropertyEvent read FOnPropertySelect write FOnPropertySelect;
@@ -456,10 +470,53 @@ type
     /// <summary>Column splitter appearance and position.</summary>
     property Splitter: TInspectorSplitter read FSplitter write FSplitter;
 
+    /// <summary>Controls automatic alignment within the parent.</summary>
     property Align;
+    /// <summary>Controls which parent edges anchor the inspector.</summary>
     property Anchors;
+    /// <summary>Constrains the minimum and maximum control size.</summary>
+    property Constraints;
+    /// <summary>Specifies the fallback background color used outside styled drawing.</summary>
+    property Color;
+    /// <summary>Controls whether the inspector accepts user interaction.</summary>
     property Enabled;
+    /// <summary>Provides the inherited control font for application-level consistency.</summary>
+    property Font;
+    /// <summary>Controls whether the inspector inherits its parent's color.</summary>
+    property ParentColor;
+    /// <summary>Controls whether the inspector inherits its parent's font.</summary>
+    property ParentFont;
+    /// <summary>Controls whether the inspector inherits its parent's hint setting.</summary>
+    property ParentShowHint;
+    /// <summary>Associates a context menu with the inspector.</summary>
+    property PopupMenu;
+    /// <summary>Controls whether the inspector displays its hint.</summary>
+    property ShowHint;
+    /// <summary>Controls whether the inspector participates in tab navigation.</summary>
     property TabStop default True;
+    /// <summary>Controls whether the inspector is visible.</summary>
+    property Visible;
+
+    /// <summary>Raised when the inspector receives a click.</summary>
+    property OnClick;
+    /// <summary>Raised when the inspector receives a double-click.</summary>
+    property OnDblClick;
+    /// <summary>Raised when the inspector receives keyboard focus.</summary>
+    property OnEnter;
+    /// <summary>Raised when the inspector loses keyboard focus.</summary>
+    property OnExit;
+    /// <summary>Raised for key-down input handled by the inspector.</summary>
+    property OnKeyDown;
+    /// <summary>Raised for key-press input handled by the inspector.</summary>
+    property OnKeyPress;
+    /// <summary>Raised for key-up input handled by the inspector.</summary>
+    property OnKeyUp;
+    /// <summary>Raised when a mouse button is pressed over the inspector.</summary>
+    property OnMouseDown;
+    /// <summary>Raised when the mouse moves over the inspector.</summary>
+    property OnMouseMove;
+    /// <summary>Raised when a mouse button is released over the inspector.</summary>
+    property OnMouseUp;
   end;
 
 /// <summary>Registers TInspector on the ERDesigns component palette page.</summary>
@@ -1082,6 +1139,68 @@ begin
   Repaint;
 end;
 
+procedure TInspector.ExpandAll;
+var
+  CategoryIndex: Integer;
+begin
+  BeginUpdate;
+  try
+    for CategoryIndex := 0 to Categories.Count - 1 do
+      Categories[CategoryIndex].Collapsed := False;
+  finally
+    EndUpdate;
+  end;
+end;
+
+procedure TInspector.CollapseAll;
+var
+  CategoryIndex: Integer;
+begin
+  BeginUpdate;
+  try
+    for CategoryIndex := 0 to Categories.Count - 1 do
+      Categories[CategoryIndex].Collapsed := True;
+  finally
+    EndUpdate;
+  end;
+end;
+
+procedure TInspector.EnsureSelectedVisible;
+var
+  ItemRect: TRect;
+  ViewportHeight: Integer;
+begin
+  if Selected is TInspectorCategory then
+    ItemRect := TInspectorCategory(Selected).Rect
+  else if Selected is TInspectorProperty then
+    ItemRect := TInspectorProperty(Selected).Rect
+  else
+    Exit;
+
+  ViewportHeight := Max(1, ClientHeight - Scale(2));
+  if ItemRect.Top < FScrollPos then
+    FScrollPos := ItemRect.Top
+  else if ItemRect.Bottom > FScrollPos + ViewportHeight then
+    FScrollPos := ItemRect.Bottom - ViewportHeight;
+  ScrollPosUpdated;
+end;
+
+function TInspector.GetSelectedProperty: TInspectorProperty;
+begin
+  if Selected is TInspectorProperty then
+    Result := TInspectorProperty(Selected)
+  else
+    Result := nil;
+end;
+
+function TInspector.GetSelectedCategory: TInspectorCategory;
+begin
+  if Selected is TInspectorCategory then
+    Result := TInspectorCategory(Selected)
+  else
+    Result := nil;
+end;
+
 procedure TInspector.CategoriesChanged(Sender: TObject);
 var
   CategoryIndex: Integer;
@@ -1203,7 +1322,8 @@ procedure TInspector.UpdateRects;
     else
     if not Enabled then
       D := S.GetElementDetails(tcTransparentBackgroundDisabled);
-    if not S.GetElementColor(D, ecFillColor, C) then C := S.GetSystemColor(clWindow);
+    if not S.GetElementColor(D, ecFillColor, C) then
+      C := S.GetSystemColor(Color);
     with FItemBuffer.Canvas do
     begin
       Brush.Color := C;
@@ -2098,6 +2218,8 @@ begin
     if (Item is TInspectorCategory) and Assigned(OnCategorySelect) then
       OnCategorySelect(Selected as TInspectorCategory);
 
+    if FUpdateCount < 0 then
+      EnsureSelectedVisible;
     if CanFocus then SetFocus;
     Exit;
   end;
@@ -2113,6 +2235,9 @@ begin
       FSelected := nil;
       Exit;
     end;
+
+    if FUpdateCount < 0 then
+      EnsureSelectedVisible;
 
     if &Property.EditButton then
     begin
@@ -2252,7 +2377,18 @@ end;
 procedure TInspector.CMFontChanged(var Message: TMessage);
 begin
   inherited;
-  Repaint;
+  if Assigned(FCategoryOptions) and Assigned(FPropertyOptions) then
+  begin
+    BeginUpdate;
+    try
+      FCategoryOptions.Font.Assign(Font);
+      FPropertyOptions.Font.Assign(Font);
+    finally
+      EndUpdate;
+    end;
+  end
+  else
+    Repaint;
 end;
 
 procedure TInspector.CMSysColorChange(var Message: TMessage);

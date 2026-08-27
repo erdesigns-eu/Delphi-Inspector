@@ -56,6 +56,12 @@ end;
 
 See [`examples/InspectorDemo`](examples/InspectorDemo) for a minimal code-only VCL application containing editable and edit-button properties, an initially collapsed category, and event handlers.
 
+For programmatic navigation, assign `Selected` and call `EnsureSelectedVisible`, or use
+the typed `SelectedProperty` and `SelectedCategory` accessors. `ExpandAll` and
+`CollapseAll` update every category in one buffered operation. The inspector also
+publishes the usual VCL appearance, hint, popup-menu, keyboard, mouse, focus, and
+visibility properties/events for convenient use at design time.
+
 ## Events
 
 - `OnPropertySelect` — a property became selected.
