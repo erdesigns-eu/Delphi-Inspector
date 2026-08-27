@@ -1,48 +1,69 @@
 # Delphi Inspector
 
-Delphi Inspector is a small, dependency-free VCL property-grid style component. It provides collapsible categories, Variant-backed property values, inline editing, and optional ellipsis buttons while retaining the native Windows/VCL visual character.
+Delphi Inspector is a compact property-grid style component for Delphi VCL applications. It displays application-defined properties in collapsible categories and supports inline value editing, optional edit buttons, keyboard navigation, VCL Styles, and high-DPI layouts.
 
-![Inspector using the Windows theme](Screenshot-1.png)
-![Inspector using a VCL Style](Screenshot-3.png)
+The component consists of a single source unit and has no dependencies beyond the Delphi RTL and VCL.
+
+![Delphi Inspector using the Windows theme](Screenshot-1.png)
+![Delphi Inspector using a VCL Style](Screenshot-3.png)
 
 ## Features
 
-- Collapsible categories and keyboard navigation
-- Editable `Variant` values (`Null` and `Empty` are displayed safely as blank text)
-- Optional edit buttons for dialogs, pickers, or application-defined actions
-- Drag-adjustable name/value splitter and vertical scrolling
-- Selection, live-change, completed-change, button, and category events
-- Buffered custom painting with VCL Styles support
-- DPI-aware geometry while preserving the original 96-DPI defaults
-- One self-contained source unit; no runtime dependencies beyond the VCL
+- Collapsible property categories
+- Inline editing of `Variant`-backed values
+- Optional ellipsis buttons for dialogs, pickers, and custom actions
+- Adjustable name/value splitter
+- Mouse, keyboard, and mouse-wheel navigation
+- Typed access to the selected property or category
+- Buffered custom painting
+- VCL Styles support
+- DPI-aware dimensions and editor placement
+- Design-time collection editing
+- Self-contained `Inspector.pas` unit
 
 ## Requirements
 
-The component targets modern Delphi versions with VCL support on Windows. It uses namespaced RTL/VCL units, class constructors, `CurrentPPI`, and inline variable declarations. Validate the unit with the oldest Delphi release you intend to support; no Delphi compiler is included in every development environment.
+- Delphi 10.3 Rio or newer
+- VCL application targeting Windows
+
+No third-party libraries or runtime packages are required.
 
 ## Installation
 
-1. Copy `Inspector.pas` into your project or a shared source directory.
-2. Add its directory to the Delphi search path.
-3. Add `Inspector` to a form unit's `uses` clause and create `TInspector` in code, **or** install the unit in a design-time package. The `Register` procedure adds it to the **ERDesigns** palette page.
+### Add the unit directly to a project
 
-No external package or library is required.
+1. Copy `Inspector.pas` into your project directory or a shared source directory.
+2. Add the directory to the project's Delphi search path.
+3. Add `Inspector` to the relevant unit's `uses` clause.
+4. Create `TInspector` in code, or add the unit to a design-time package to install it on the component palette.
 
-## Minimal usage
+The included `Register` procedure registers `TInspector` on the **ERDesigns** palette page.
+
+## Basic usage
 
 ```pascal
+uses
+  Inspector;
+
+procedure TMainForm.PopulateInspector;
 var
   Category: TInspectorCategory;
   Item: TInspectorProperty;
 begin
   Inspector1.BeginUpdate;
   try
+    Inspector1.Clear;
+
     Category := Inspector1.Categories.Add;
     Category.Caption := 'General';
 
     Item := Category.Properties.Add;
     Item.Name := 'Caption';
     Item.Value := 'Example';
+
+    Item := Category.Properties.Add;
+    Item.Name := 'Enabled';
+    Item.Value := True;
 
     Item := Category.Properties.Add;
     Item.Name := 'Color';
@@ -54,34 +75,104 @@ begin
 end;
 ```
 
-See [`examples/InspectorDemo`](examples/InspectorDemo) for a minimal code-only VCL application containing editable and edit-button properties, an initially collapsed category, and event handlers.
+`Value` remains a `Variant`, allowing the application to associate common Delphi value types with an inspector property. The inline editor displays the value as text; edits made in the inline editor are written back as text so the application can validate or convert them in an event handler when necessary. `Null` and `Empty` values are displayed as empty text.
 
-For programmatic navigation, assign `Selected` and call `EnsureSelectedVisible`, or use
-the typed `SelectedProperty` and `SelectedCategory` accessors. `ExpandAll` and
-`CollapseAll` update every category in one buffered operation. The inspector also
-publishes the usual VCL appearance, hint, popup-menu, keyboard, mouse, focus, and
-visibility properties/events for convenient use at design time.
+## Handling events
 
-## Events
+```pascal
+procedure TMainForm.InspectorPropertyChange(
+  const AProperty: TInspectorProperty);
+begin
+  if AProperty.Name = 'Enabled' then
+    MyObject.Enabled := StrToBoolDef(VarToStr(AProperty.Value), False);
+end;
 
-- `OnPropertySelect` — a property became selected.
-- `OnPropertyChange` — inline text changed and was written to `Value`.
-- `OnPropertyChanged` — the editor lost focus after an edit session.
-- `OnPropertyButtonClick` — the ellipsis button was clicked.
-- `OnCategorySelect`, `OnCategoryCollapse`, and `OnCategoryExpand` — category interaction notifications.
+procedure TMainForm.InspectorPropertyButtonClick(
+  const AProperty: TInspectorProperty);
+begin
+  if AProperty.Name = 'Color' then
+  begin
+    // Open an application-specific color picker here.
+    AProperty.Value := 'clHighlight';
+  end;
+end;
+```
 
-Editing intentionally writes display text back to the public `Variant` value, preserving the component's established behavior. Applications that need typed parsing can do so in the change events.
+Available component events include:
 
-## Styling and customization
+| Event | Raised when |
+| --- | --- |
+| `OnPropertySelect` | A property becomes selected |
+| `OnPropertyChange` | Inline editor text changes |
+| `OnPropertyChanged` | An inline edit session loses focus |
+| `OnPropertyButtonClick` | A property's ellipsis button is clicked |
+| `OnCategorySelect` | A category becomes selected |
+| `OnCategoryCollapse` | A category is collapsed with the mouse |
+| `OnCategoryExpand` | A category is expanded with the mouse |
 
-`CategoryOptions`, `PropertyOptions`, `GutterOptions`, and `Splitter` expose the original fonts, colors, dimensions, focus rectangle, cursor, and splitter position. System colors are resolved through VCL style services. Add any desired style to the host executable in Delphi and activate it normally with `TStyleManager`; the component needs no style-specific setup.
+The standard VCL click, focus, keyboard, and mouse events are also published.
 
-Dimensions retain their original meaning at 96 DPI and are scaled using the control's current PPI for per-monitor DPI scenarios. The inline editor and button are repositioned whenever layout or scrolling changes.
+## Selection and navigation
+
+Use `Selected` to select either a `TInspectorProperty` or a `TInspectorCategory`. The typed `SelectedProperty` and `SelectedCategory` properties avoid manual type checks:
+
+```pascal
+Inspector1.Selected := Item;
+Inspector1.EnsureSelectedVisible;
+
+if Assigned(Inspector1.SelectedProperty) then
+  Caption := Inspector1.SelectedProperty.Name;
+```
+
+`ExpandAll` and `CollapseAll` update all categories in a single buffered operation.
+
+Keyboard support includes:
+
+- **Up/Down** to move through categories and visible properties
+- **Left/Right** to collapse or expand the selected category
+- **Home/End** to move to the first or last visible item
+- **Page Up/Page Down** to scroll by a page
+- **Enter** to finish inline editing
+- **Escape** to close the editor and clear the selection
+- **Ctrl+Mouse wheel** to change the selection
+
+## Appearance and styling
+
+The main appearance groups are:
+
+- `CategoryOptions` — category height, color, font, and focus rectangle
+- `PropertyOptions` — property row height and font
+- `GutterOptions` — collapse-glyph gutter width and color
+- `Splitter` — splitter position, color, and cursor
+
+The Inspector also publishes standard VCL properties such as `Color`, `Font`, `Constraints`, `PopupMenu`, `ShowHint`, and `Visible`.
+
+VCL Styles are resolved through the VCL style services. Styles linked into the host application can be selected normally through `TStyleManager`; the component requires no style-specific setup.
+
+Dimensions are stored as logical 96-DPI values and scaled using the control's current PPI. Category rows, property rows, gutter, splitter, inline editor, edit button, and drawing offsets therefore retain their intended proportions on high-DPI displays.
+
+## Example application
+
+[`examples/InspectorDemo`](examples/InspectorDemo) contains a minimal code-only VCL application demonstrating:
+
+- Editable properties
+- An edit-button property
+- An initially collapsed category
+- Selection and change events
+- Category collapse and expand events
+- Runtime VCL Style selection
+
+Open `examples/InspectorDemo/InspectorDemo.dpr` in Delphi to build and run it.
 
 ## Screenshots
 
-The repository retains all original screenshots: [Windows 1](Screenshot-1.png), [Windows 2](Screenshot-2.png), [VCL Style 1](Screenshot-3.png), and [VCL Style 2](Screenshot-4.png).
+Additional screenshots are available in the repository:
 
-## License and maintenance
+- [Windows theme — screenshot 1](Screenshot-1.png)
+- [Windows theme — screenshot 2](Screenshot-2.png)
+- [VCL Style — screenshot 3](Screenshot-3.png)
+- [VCL Style — screenshot 4](Screenshot-4.png)
 
-The repository does not currently include a license file. Consequently, no license grant should be inferred; contact the repository owner before redistribution. The component is maintained as a compact reusable VCL control rather than a framework or component suite.
+## License
+
+Delphi Inspector is available under the [MIT License](LICENSE).
