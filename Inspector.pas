@@ -4,13 +4,14 @@
 {           Author: Ernst Reidinga                      }
 {                                                       }
 {           Inspector like component with categories,   }
-{           inline editor and button. VCL Styles        }
+{           inline editors and edit buttons. VCL        }
 {           are supported.                              }
 {                                                       }
-{           Version: 1.0                                }
-{           Date   : 22/08/2023                         }
+{           Version: 1.1                                }
+{           Date   : 28/08/2026                         }
 {                                                       }
 {           Version History:                            }
+{           - 1.1.0.0 Multiple inline editor types      }
 {           - 1.0.0.0                                   }
 {                                                       }
 {*******************************************************}
@@ -21,7 +22,7 @@ interface
 
 uses
   WinApi.Windows, WinApi.Messages, System.SysUtils, System.Classes, System.Variants, Vcl.Controls,
-  Vcl.Themes, Vcl.Graphics, System.Types, Vcl.StdCtrls;
+  Vcl.Themes, Vcl.Graphics, System.Types, Vcl.StdCtrls, Vcl.ComCtrls;
 
 const
   MinimalHeight = 16;
@@ -50,6 +51,9 @@ const
 type
   TInspectorProperty = class;
   TInspectorCategory = class;
+
+  /// <summary>Selects the inline editor used for an inspector property.</summary>
+  TInspectorEditorKind = (iekText, iekNumber, iekBoolean, iekDropDown, iekDate);
 
   /// <summary>Event raised for a property item.</summary>
   TInspectorPropertyEvent = procedure(const &Property: TInspectorProperty) of object;
@@ -92,6 +96,8 @@ type
     FName: string;
     FValue: Variant;
     FEditButton: Boolean;
+    FEditorKind: TInspectorEditorKind;
+    FDropDownItems: TStringList;
     FTag: Integer;
 
     FRect: TRect;
@@ -100,11 +106,19 @@ type
     procedure SetName(const Name: string);
     procedure SetValue(const Value: Variant);
     procedure SetEditButton(const Button: Boolean);
+    /// <summary>Changes the inline editor assigned to this property.</summary>
+    procedure SetEditorKind(const EditorKind: TInspectorEditorKind);
+    /// <summary>Copies choices into the owned drop-down item list.</summary>
+    procedure SetDropDownItems(const Items: TStrings);
+    /// <summary>Notifies the collection when drop-down choices change.</summary>
+    procedure DropDownItemsChanged(Sender: TObject);
   protected
     function GetDisplayName: string; override;
   public
     /// <summary>Creates a property owned by Collection.</summary>
     constructor Create(Collection: TCollection); override;
+    /// <summary>Releases the owned drop-down item list.</summary>
+    destructor Destroy; override;
     /// <summary>Copies the public state from another inspector property.</summary>
     procedure Assign(Source: TPersistent); override;
 
@@ -121,6 +135,10 @@ type
     property Value: Variant read FValue write SetValue;
     /// <summary>Shows an ellipsis button beside the inline editor.</summary>
     property EditButton: Boolean read FEditButton write SetEditButton default False;
+    /// <summary>Selects the text, number, Boolean, drop-down, or date editor.</summary>
+    property EditorKind: TInspectorEditorKind read FEditorKind write SetEditorKind default iekText;
+    /// <summary>Contains the choices displayed by the drop-down editor.</summary>
+    property DropDownItems: TStrings read FDropDownItems write SetDropDownItems;
     /// <summary>Application-defined integer associated with this property.</summary>
     property Tag: Integer read FTag write FTag;
   end;
@@ -356,8 +374,12 @@ type
     FSplitter: TInspectorSplitter;
 
     FInspectorEditActive: Boolean;
+    FEditorUpdating: Boolean;
     FInspectorEdit: TInspectorPropertyEdit;
     FInspectorEditButton: TInspectorPropertyEditButton;
+    FInspectorComboBox: TComboBox;
+    FInspectorDatePicker: TDateTimePicker;
+    FInspectorCheckBox: TCheckBox;
 
     /// <summary>Returns the selected item as a property, or nil.</summary>
     function GetSelectedProperty: TInspectorProperty;
@@ -368,6 +390,20 @@ type
     procedure OnPropertyEditorExit(Sender: TObject);
     procedure OnPropertyEditorChange(Sender: TObject);
     procedure OnPropertyEditorButtonClick(Sender: TObject);
+    /// <summary>Validates keyboard input for the numeric inline editor.</summary>
+    procedure OnNumberEditorKeyPress(Sender: TObject; var Key: Char);
+    /// <summary>Writes the selected drop-down item to the property value.</summary>
+    procedure OnComboBoxChange(Sender: TObject);
+    /// <summary>Writes the selected date to the property value.</summary>
+    procedure OnDatePickerChange(Sender: TObject);
+    /// <summary>Writes the checked state to the property value.</summary>
+    procedure OnCheckBoxClick(Sender: TObject);
+    /// <summary>Raises the live property-change event after an editor update.</summary>
+    procedure DoPropertyChange(const InspectorProperty: TInspectorProperty);
+    /// <summary>Returns the client rectangle used by the active inline editor.</summary>
+    function GetEditorBounds(const InspectorProperty: TInspectorProperty): TRect;
+    /// <summary>Positions all visible child editors for the selected property.</summary>
+    procedure UpdateEditorBounds;
     /// <summary>Hides and disconnects both child editors.</summary>
     procedure DeactivateEditor;
     /// <summary>Safely converts a Variant to its displayed text.</summary>
@@ -608,6 +644,15 @@ begin
   inherited Create(Collection);
   FName := '';
   FValue := '';
+  FEditorKind := iekText;
+  FDropDownItems := TStringList.Create;
+  FDropDownItems.OnChange := DropDownItemsChanged;
+end;
+
+destructor TInspectorProperty.Destroy;
+begin
+  FDropDownItems.Free;
+  inherited Destroy;
 end;
 
 procedure TInspectorProperty.Assign(Source: TPersistent);
@@ -617,11 +662,40 @@ begin
     FName := TInspectorProperty(Source).Name;
     FValue := TInspectorProperty(Source).Value;
     FEditButton := TInspectorProperty(Source).EditButton;
+    FEditorKind := TInspectorProperty(Source).EditorKind;
+    FDropDownItems.OnChange := nil;
+    try
+      FDropDownItems.Assign(TInspectorProperty(Source).DropDownItems);
+    finally
+      FDropDownItems.OnChange := DropDownItemsChanged;
+    end;
     FTag := TInspectorProperty(Source).Tag;
     Changed(False);
   end
   else
     inherited;
+end;
+
+procedure TInspectorProperty.SetEditorKind(const EditorKind: TInspectorEditorKind);
+begin
+  if FEditorKind <> EditorKind then
+  begin
+    FEditorKind := EditorKind;
+    Changed(False);
+  end;
+end;
+
+procedure TInspectorProperty.SetDropDownItems(const Items: TStrings);
+begin
+  if Items = nil then
+    FDropDownItems.Clear
+  else
+    FDropDownItems.Assign(Items);
+end;
+
+procedure TInspectorProperty.DropDownItemsChanged(Sender: TObject);
+begin
+  Changed(False);
 end;
 
 procedure TInspectorProperty.SetName(const Name: string);
@@ -1053,6 +1127,33 @@ begin
   FInspectorEditButton.Parent  := Self;
   FInspectorEditButton.Visible := False;
   FInspectorEditButton.OnClick := OnPropertyEditorButtonClick;
+
+  FInspectorComboBox := TComboBox.Create(Self);
+  FInspectorComboBox.Font.Assign(PropertyOptions.Font);
+  FInspectorComboBox.Parent := Self;
+  FInspectorComboBox.Visible := False;
+  FInspectorComboBox.Style := csDropDownList;
+  FInspectorComboBox.OnChange := OnComboBoxChange;
+  FInspectorComboBox.OnExit := OnPropertyEditorExit;
+  FInspectorComboBox.OnKeyDown := OnPropertyEditorKeyDown;
+
+  FInspectorDatePicker := TDateTimePicker.Create(Self);
+  FInspectorDatePicker.Font.Assign(PropertyOptions.Font);
+  FInspectorDatePicker.Parent := Self;
+  FInspectorDatePicker.Visible := False;
+  FInspectorDatePicker.Kind := dtkDate;
+  FInspectorDatePicker.OnChange := OnDatePickerChange;
+  FInspectorDatePicker.OnExit := OnPropertyEditorExit;
+  FInspectorDatePicker.OnKeyDown := OnPropertyEditorKeyDown;
+
+  FInspectorCheckBox := TCheckBox.Create(Self);
+  FInspectorCheckBox.Font.Assign(PropertyOptions.Font);
+  FInspectorCheckBox.Parent := Self;
+  FInspectorCheckBox.Visible := False;
+  FInspectorCheckBox.Caption := '';
+  FInspectorCheckBox.OnClick := OnCheckBoxClick;
+  FInspectorCheckBox.OnExit := OnPropertyEditorExit;
+  FInspectorCheckBox.OnKeyDown := OnPropertyEditorKeyDown;
 end;
 
 destructor TInspector.Destroy;
@@ -1069,6 +1170,9 @@ begin
   if Assigned(FSplitter) then
     FSplitter.OnChange := nil;
 
+  FInspectorCheckBox.Free;
+  FInspectorDatePicker.Free;
+  FInspectorComboBox.Free;
   FInspectorEditButton.Free;
   FInspectorEdit.Free;
   FCategories.Free;
@@ -1240,6 +1344,9 @@ begin
   FInspectorEditButton.Font.Assign(PropertyOptions.Font);
   FInspectorEditButton.Width := Scale(ButtonWidth);
   FInspectorEditButton.Height := Max(1, Scale(PropertyOptions.Height) - Scale(2));
+  FInspectorComboBox.Font.Assign(PropertyOptions.Font);
+  FInspectorDatePicker.Font.Assign(PropertyOptions.Font);
+  FInspectorCheckBox.Font.Assign(PropertyOptions.Font);
   if FUpdateCount > -1 then
     Exit;
   UpdateRects;
@@ -1250,9 +1357,13 @@ end;
 procedure TInspector.DeactivateEditor;
 begin
   FInspectorEditActive := False;
+  FEditorUpdating := False;
   FInspectorEdit.SetEditorInActive;
-  FInspectorEdit.InspectorProperty := nil;
   FInspectorEditButton.SetEditorInActive;
+  FInspectorComboBox.Visible := False;
+  FInspectorDatePicker.Visible := False;
+  FInspectorCheckBox.Visible := False;
+  FInspectorEdit.InspectorProperty := nil;
 end;
 
 function TInspector.DisplayText(const Value: Variant): string;
@@ -1695,14 +1806,6 @@ begin
 end;
 
 procedure TInspector.Paint;
-
-  function OffsetEditorRect(const Rect: TRect): TRect;
-  begin
-    Result := TRect.Create(Rect);
-    Result.Width := Max(0, Result.Width - Scale(TextOffset));
-    OffsetRect(Result, Scale(GutterOptions.Width + TextOffset + 1), 0);
-  end;
-
 var
   X, Y : Integer;
   W, H : Integer;
@@ -1729,16 +1832,7 @@ begin
   else
     BitBlt(Canvas.Handle, 0, 0, ClientWidth, ClientHeight, FBuffer.Canvas.Handle, 0, 0, SRCCOPY);
 
-  // Update position of editor
-  if (Selected is TInspectorProperty) then
-  begin
-    var &Property := (Selected as TInspectorProperty);
-    if FInspectorEdit.Visible then
-      FInspectorEdit.UpdateEditorPosition(ScrollOffsetRect(OffsetEditorRect(&Property.EditorRect)));
-    // Button
-    if FInspectorEditButton.Visible then
-      FInspectorEditButton.UpdateEditorPosition(ScrollOffsetRect(OffsetEditorRect(&Property.EditorRect)));
-  end;
+  UpdateEditorBounds;
 end;
 
 procedure TInspector.CreateParams(var Params: TCreateParams);
@@ -2195,15 +2289,50 @@ begin
   end;
 end;
 
+function TInspector.GetEditorBounds(
+  const InspectorProperty: TInspectorProperty): TRect;
+begin
+  Result := InspectorProperty.EditorRect;
+  Result.Width := Max(0, Result.Width - Scale(TextOffset));
+  OffsetRect(Result, Scale(GutterOptions.Width + TextOffset + 1), -FScrollPos);
+  if InspectorProperty.EditButton then
+    Result.Right := Max(Result.Left, Result.Right - Scale(ButtonWidth));
+end;
+
+procedure TInspector.UpdateEditorBounds;
+var
+  EditorRect: TRect;
+  ButtonRect: TRect;
+begin
+  if not (Selected is TInspectorProperty) then
+    Exit;
+
+  EditorRect := GetEditorBounds(TInspectorProperty(Selected));
+  ButtonRect := EditorRect;
+  if TInspectorProperty(Selected).EditButton then
+    Inc(ButtonRect.Right, Scale(ButtonWidth));
+
+  if FInspectorEdit.Visible then
+    FInspectorEdit.UpdateEditorPosition(EditorRect);
+  if FInspectorComboBox.Visible then
+    FInspectorComboBox.SetBounds(EditorRect.Left, EditorRect.Top,
+      Max(0, EditorRect.Width), Max(1, EditorRect.Height));
+  if FInspectorDatePicker.Visible then
+    FInspectorDatePicker.SetBounds(EditorRect.Left, EditorRect.Top,
+      Max(0, EditorRect.Width), Max(1, EditorRect.Height));
+  if FInspectorCheckBox.Visible then
+    FInspectorCheckBox.SetBounds(EditorRect.Left + Scale(TextOffset), EditorRect.Top,
+      Max(0, EditorRect.Width - Scale(TextOffset)), Max(1, EditorRect.Height));
+  if FInspectorEditButton.Visible then
+    FInspectorEditButton.UpdateEditorPosition(ButtonRect);
+end;
+
 procedure TInspector.SetSelected(const Item: TCollectionItem);
-
-  function OffsetEditorRect(const Rect: TRect): TRect;
-  begin
-    Result := TRect.Create(Rect);
-    Result.Width := Max(0, Result.Width - Scale(TextOffset));
-    OffsetRect(Result, Scale(GutterOptions.Width + TextOffset + 1), 0);
-  end;
-
+var
+  InspectorProperty: TInspectorProperty;
+  EditorRect: TRect;
+  DateValue: TDateTime;
+  BooleanText: string;
 begin
   if (Item <> nil) and not IsItemOwned(Item) then
     Exit;
@@ -2216,47 +2345,92 @@ begin
   if (Item = nil) or (Item is TInspectorCategory) then
   begin
     if (Item is TInspectorCategory) and Assigned(OnCategorySelect) then
-      OnCategorySelect(Selected as TInspectorCategory);
+      OnCategorySelect(TInspectorCategory(Selected));
 
     if FUpdateCount < 0 then
       EnsureSelectedVisible;
-    if CanFocus then SetFocus;
+    if CanFocus then
+      SetFocus;
     Exit;
   end;
 
-  if (Item is TInspectorProperty) then
+  if not (Item is TInspectorProperty) then
+    Exit;
+
+  InspectorProperty := TInspectorProperty(Item);
+  if Assigned(OnPropertySelect) then
+    OnPropertySelect(InspectorProperty);
+  if (FSelected <> Item) or not IsItemOwned(FSelected) then
   begin
-    var &Property := (Item as TInspectorProperty);
-    var EditorRect := OffsetEditorRect(&Property.EditorRect);
-
-    if Assigned(OnPropertySelect) then OnPropertySelect(Item as TInspectorProperty);
-    if (FSelected <> Item) or not IsItemOwned(FSelected) then
-    begin
-      FSelected := nil;
-      Exit;
-    end;
-
-    if FUpdateCount < 0 then
-      EnsureSelectedVisible;
-
-    if &Property.EditButton then
-    begin
-      EditorRect.Right := EditorRect.Right - Scale(ButtonWidth);
-      FInspectorEditButton.SetEditorActive(OffsetEditorRect(&Property.EditorRect));
-    end else
-    begin
-      FInspectorEditButton.SetEditorInActive;
-    end;
-
-    FInspectorEdit.InspectorProperty := &Property;
-    FInspectorEdit.SetEditorActive(EditorRect, DisplayText(&Property.Value));
-    FInspectorEditActive := True;
+    FSelected := nil;
+    Exit;
   end;
+
+  if FUpdateCount < 0 then
+    EnsureSelectedVisible;
+
+  EditorRect := GetEditorBounds(InspectorProperty);
+  FInspectorEdit.InspectorProperty := InspectorProperty;
+  FEditorUpdating := True;
+  try
+    if InspectorProperty.EditButton then
+      FInspectorEditButton.SetEditorActive(EditorRect);
+
+    case InspectorProperty.EditorKind of
+      iekText, iekNumber:
+        begin
+          if InspectorProperty.EditorKind = iekNumber then
+            FInspectorEdit.OnKeyPress := OnNumberEditorKeyPress
+          else
+            FInspectorEdit.OnKeyPress := nil;
+          FInspectorEdit.SetEditorActive(EditorRect,
+            DisplayText(InspectorProperty.Value));
+        end;
+      iekBoolean:
+        begin
+          BooleanText := DisplayText(InspectorProperty.Value);
+          FInspectorCheckBox.Checked := SameText(BooleanText, 'True') or
+            SameText(BooleanText, 'Yes') or (BooleanText = '1');
+          FInspectorCheckBox.Visible := True;
+          UpdateEditorBounds;
+          FInspectorCheckBox.SetFocus;
+        end;
+      iekDropDown:
+        begin
+          FInspectorComboBox.Items.Assign(InspectorProperty.DropDownItems);
+          FInspectorComboBox.ItemIndex := FInspectorComboBox.Items.IndexOf(
+            DisplayText(InspectorProperty.Value));
+          if (FInspectorComboBox.ItemIndex < 0) and
+            (DisplayText(InspectorProperty.Value) <> '') then
+          begin
+            FInspectorComboBox.Items.Insert(0,
+              DisplayText(InspectorProperty.Value));
+            FInspectorComboBox.ItemIndex := 0;
+          end;
+          FInspectorComboBox.Visible := True;
+          UpdateEditorBounds;
+          FInspectorComboBox.SetFocus;
+        end;
+      iekDate:
+        begin
+          DateValue := Date;
+          TryStrToDateTime(DisplayText(InspectorProperty.Value), DateValue);
+          FInspectorDatePicker.DateTime := DateValue;
+          FInspectorDatePicker.Visible := True;
+          UpdateEditorBounds;
+          FInspectorDatePicker.SetFocus;
+        end;
+    end;
+    UpdateEditorBounds;
+  finally
+    FEditorUpdating := False;
+  end;
+  FInspectorEditActive := True;
 end;
 
 procedure TInspector.OnPropertyEditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
-  if Key in [VK_UP, VK_DOWN, VK_HOME, VK_END] then
+  if (Sender = FInspectorEdit) and (Key in [VK_UP, VK_DOWN, VK_HOME, VK_END]) then
   begin
     KeyDown(Key, Shift);
     Key := 0;
@@ -2275,8 +2449,54 @@ begin
     Repaint;
     Key := 0;
   end
-  else
-    inherited;
+end;
+
+procedure TInspector.OnNumberEditorKeyPress(Sender: TObject; var Key: Char);
+begin
+  if (Key >= #32) and not CharInSet(Key, ['0'..'9', '-', '+',
+    FormatSettings.DecimalSeparator]) then
+    Key := #0;
+end;
+
+procedure TInspector.DoPropertyChange(
+  const InspectorProperty: TInspectorProperty);
+begin
+  if IsItemOwned(InspectorProperty) and Assigned(OnPropertyChange) then
+    OnPropertyChange(InspectorProperty);
+end;
+
+procedure TInspector.OnComboBoxChange(Sender: TObject);
+var
+  InspectorProperty: TInspectorProperty;
+begin
+  if FEditorUpdating or not (Selected is TInspectorProperty) or
+    (FInspectorComboBox.ItemIndex < 0) then
+    Exit;
+  InspectorProperty := TInspectorProperty(Selected);
+  InspectorProperty.Value := FInspectorComboBox.Items[FInspectorComboBox.ItemIndex];
+  DoPropertyChange(InspectorProperty);
+end;
+
+procedure TInspector.OnDatePickerChange(Sender: TObject);
+var
+  InspectorProperty: TInspectorProperty;
+begin
+  if FEditorUpdating or not (Selected is TInspectorProperty) then
+    Exit;
+  InspectorProperty := TInspectorProperty(Selected);
+  InspectorProperty.Value := FInspectorDatePicker.DateTime;
+  DoPropertyChange(InspectorProperty);
+end;
+
+procedure TInspector.OnCheckBoxClick(Sender: TObject);
+var
+  InspectorProperty: TInspectorProperty;
+begin
+  if FEditorUpdating or not (Selected is TInspectorProperty) then
+    Exit;
+  InspectorProperty := TInspectorProperty(Selected);
+  InspectorProperty.Value := FInspectorCheckBox.Checked;
+  DoPropertyChange(InspectorProperty);
 end;
 
 procedure TInspector.OnPropertyEditorExit(Sender: TObject);
@@ -2287,31 +2507,67 @@ begin
 end;
 
 procedure TInspector.OnPropertyEditorChange(Sender: TObject);
+var
+  InspectorProperty: TInspectorProperty;
+  NumberValue: Double;
 begin
-  if FInspectorEditActive and (Selected is TInspectorProperty) then
+  if FEditorUpdating or not FInspectorEditActive or
+    not (Selected is TInspectorProperty) then
+    Exit;
+
+  InspectorProperty := TInspectorProperty(Selected);
+  if InspectorProperty.EditorKind = iekNumber then
   begin
-    var InspectorProperty := TInspectorProperty(Selected);
+    if not TryStrToFloat(FInspectorEdit.Text, NumberValue) then
+      Exit;
+    InspectorProperty.Value := NumberValue;
+  end
+  else
     InspectorProperty.Value := FInspectorEdit.Text;
-    if IsItemOwned(InspectorProperty) and Assigned(OnPropertyChange) then
-      OnPropertyChange(InspectorProperty);
-  end;
+  DoPropertyChange(InspectorProperty);
 end;
 
 procedure TInspector.OnPropertyEditorButtonClick(Sender: TObject);
+var
+  InspectorProperty: TInspectorProperty;
+  DateValue: TDateTime;
+  BooleanText: string;
 begin
-  if (Selected is TInspectorProperty) then
-  begin
-    if Assigned(OnPropertyButtonClick) then
-      OnPropertyButtonClick(Selected as TInspectorProperty);
-    if (Selected = nil) or not IsItemOwned(Selected) then
-      Exit;
-    FInspectorEditActive := False;
-    try
-      FInspectorEdit.Text := DisplayText(TInspectorProperty(Selected).Value);
-      FInspectorEdit.SelectAll;
-    finally
-      FInspectorEditActive := True;
+  if not (Selected is TInspectorProperty) then
+    Exit;
+
+  InspectorProperty := TInspectorProperty(Selected);
+  if Assigned(OnPropertyButtonClick) then
+    OnPropertyButtonClick(InspectorProperty);
+  if not IsItemOwned(InspectorProperty) or (Selected <> InspectorProperty) then
+    Exit;
+
+  FEditorUpdating := True;
+  try
+    case InspectorProperty.EditorKind of
+      iekText, iekNumber:
+        begin
+          FInspectorEdit.Text := DisplayText(InspectorProperty.Value);
+          FInspectorEdit.SelectAll;
+        end;
+      iekBoolean:
+        begin
+          BooleanText := DisplayText(InspectorProperty.Value);
+          FInspectorCheckBox.Checked := SameText(BooleanText, 'True') or
+            SameText(BooleanText, 'Yes') or (BooleanText = '1');
+        end;
+      iekDropDown:
+        FInspectorComboBox.ItemIndex := FInspectorComboBox.Items.IndexOf(
+          DisplayText(InspectorProperty.Value));
+      iekDate:
+        begin
+          DateValue := FInspectorDatePicker.DateTime;
+          if TryStrToDateTime(DisplayText(InspectorProperty.Value), DateValue) then
+            FInspectorDatePicker.DateTime := DateValue;
+        end;
     end;
+  finally
+    FEditorUpdating := False;
   end;
 end;
 

@@ -3,7 +3,7 @@ unit Main;
 interface
 
 uses
-  System.Classes, System.Variants, Vcl.Controls, Vcl.Forms, Vcl.StdCtrls,
+  System.Classes, System.SysUtils, System.Variants, Vcl.Controls, Vcl.Forms, Vcl.StdCtrls,
   Vcl.Themes, Inspector;
 
 type
@@ -29,7 +29,8 @@ type
     procedure CategoryExpanded(const ACategory: TInspectorCategory);
     /// <summary>Adds one property to a category.</summary>
     procedure AddProperty(const ACategory: TInspectorCategory; const AName: string;
-      const AValue: Variant; const AEditButton: Boolean = False);
+      const AValue: Variant; const AEditorKind: TInspectorEditorKind = iekText;
+      const AEditButton: Boolean = False);
   public
     /// <summary>Creates and populates the demonstration UI.</summary>
     constructor Create(AOwner: TComponent); override;
@@ -46,6 +47,7 @@ uses
 constructor TMainForm.Create(AOwner: TComponent);
 var
   Category: TInspectorCategory;
+  InspectorProperty: TInspectorProperty;
   StyleName: string;
 begin
   inherited CreateNew(AOwner);
@@ -85,8 +87,18 @@ begin
     Category := FInspector.Categories.Add;
     Category.Caption := 'Appearance';
     AddProperty(Category, 'Caption', 'Inspector demo');
-    AddProperty(Category, 'Enabled', True);
-    AddProperty(Category, 'Accent color', 'Blue', True);
+    AddProperty(Category, 'Enabled', True, iekBoolean);
+    AddProperty(Category, 'Opacity', 85.5, iekNumber);
+    AddProperty(Category, 'Created', Date, iekDate);
+    AddProperty(Category, 'Accent color', 'Blue', iekText, True);
+
+    InspectorProperty := Category.Properties.Add;
+    InspectorProperty.Name := 'Alignment';
+    InspectorProperty.EditorKind := iekDropDown;
+    InspectorProperty.DropDownItems.Add('Left');
+    InspectorProperty.DropDownItems.Add('Center');
+    InspectorProperty.DropDownItems.Add('Right');
+    InspectorProperty.Value := 'Left';
 
     Category := FInspector.Categories.Add;
     Category.Caption := 'Layout (collapsed initially)';
@@ -105,13 +117,15 @@ begin
 end;
 
 procedure TMainForm.AddProperty(const ACategory: TInspectorCategory;
-  const AName: string; const AValue: Variant; const AEditButton: Boolean);
+  const AName: string; const AValue: Variant;
+  const AEditorKind: TInspectorEditorKind; const AEditButton: Boolean);
 var
   InspectorProperty: TInspectorProperty;
 begin
   InspectorProperty := ACategory.Properties.Add;
   InspectorProperty.Name := AName;
   InspectorProperty.Value := AValue;
+  InspectorProperty.EditorKind := AEditorKind;
   InspectorProperty.EditButton := AEditButton;
 end;
 

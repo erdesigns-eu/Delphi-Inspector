@@ -10,7 +10,7 @@ The component consists of a single source unit and has no dependencies beyond th
 ## Features
 
 - Collapsible property categories
-- Inline editing of `Variant`-backed values
+- Text, number, Boolean, drop-down, and date editors for `Variant`-backed values
 - Optional ellipsis buttons for dialogs, pickers, and custom actions
 - Adjustable name/value splitter
 - Mouse, keyboard, and mouse-wheel navigation
@@ -64,6 +64,15 @@ begin
     Item := Category.Properties.Add;
     Item.Name := 'Enabled';
     Item.Value := True;
+    Item.EditorKind := iekBoolean;
+
+    Item := Category.Properties.Add;
+    Item.Name := 'Alignment';
+    Item.Value := 'Left';
+    Item.EditorKind := iekDropDown;
+    Item.DropDownItems.Add('Left');
+    Item.DropDownItems.Add('Center');
+    Item.DropDownItems.Add('Right');
 
     Item := Category.Properties.Add;
     Item.Name := 'Color';
@@ -75,7 +84,27 @@ begin
 end;
 ```
 
-`Value` remains a `Variant`, allowing the application to associate common Delphi value types with an inspector property. The inline editor displays the value as text; edits made in the inline editor are written back as text so the application can validate or convert them in an event handler when necessary. `Null` and `Empty` values are displayed as empty text.
+`Value` remains a `Variant`, allowing the application to associate common Delphi
+value types with an inspector property. Each editor writes its natural value type;
+the text editor writes a string, while number, Boolean, and date editors preserve
+their corresponding value types. `Null` and `Empty` values are displayed as empty
+text.
+
+## Property editors
+
+Set a property's `EditorKind` to select its inline editor:
+
+| Editor kind | Behavior | Value written to `Value` |
+| --- | --- | --- |
+| `iekText` | Borderless text editor | `String` |
+| `iekNumber` | Text editor restricted to numeric input | `Double` after valid input |
+| `iekBoolean` | Check box | `Boolean` |
+| `iekDropDown` | Fixed-choice combo box using `DropDownItems` | Selected `String` |
+| `iekDate` | Native VCL date picker | `TDateTime` stored in a `Variant` |
+
+`EditButton` remains independent of `EditorKind`. Set it to `True` to place an
+ellipsis button beside any editor and handle the action through
+`OnPropertyButtonClick`.
 
 ## Handling events
 
@@ -155,7 +184,7 @@ Dimensions are stored as logical 96-DPI values and scaled using the control's cu
 
 [`examples/InspectorDemo`](examples/InspectorDemo) contains a minimal code-only VCL application demonstrating:
 
-- Editable properties
+- Text, number, Boolean, drop-down, and date properties
 - An edit-button property
 - An initially collapsed category
 - Selection and change events
