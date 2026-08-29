@@ -4,7 +4,7 @@ interface
 
 uses
   System.Classes, System.SysUtils, System.Variants, Vcl.Controls, Vcl.Forms, Vcl.StdCtrls,
-  Vcl.Themes, Inspector;
+  Vcl.Themes, Vcl.Graphics, Inspector;
 
 type
   /// <summary>Demonstration form for the Delphi Inspector component.</summary>
@@ -79,6 +79,51 @@ begin
     InspectorProperty.Value := 'Left';
 
     Category := FInspector.Categories.Add;
+    Category.Caption := 'Additional editors';
+    InspectorProperty := Category.Properties.Add;
+    InspectorProperty.Name := 'Integer with spin';
+    InspectorProperty.EditorKind := iekInteger;
+    InspectorProperty.Minimum := 0;
+    InspectorProperty.Maximum := 250;
+    InspectorProperty.Increment := 5;
+    InspectorProperty.Value := 25;
+    AddProperty(Category, 'Time', Time, iekTime);
+    AddProperty(Category, 'Date and time', Now, iekDateTime);
+    AddProperty(Category, 'Color', clHighlight, iekColor);
+    AddProperty(Category, 'Open file', '', iekFile);
+    AddProperty(Category, 'Save file', '', iekSaveFile);
+    AddProperty(Category, 'Folder', '', iekFolder);
+    AddProperty(Category, 'Multiline text', 'Line one', iekMultiline);
+    AddProperty(Category, 'Password', 'secret', iekPassword);
+    AddProperty(Category, 'Font', 'Segoe UI', iekFont);
+    AddProperty(Category, 'Read only', 'Calculated value', iekReadOnly);
+    InspectorProperty := Category.Properties.Add;
+    InspectorProperty.Name := 'Slider';
+    InspectorProperty.EditorKind := iekSlider;
+    InspectorProperty.Minimum := 0;
+    InspectorProperty.Maximum := 100;
+    InspectorProperty.Increment := 10;
+    InspectorProperty.Value := 50;
+    AddProperty(Category, 'Hot key', 0, iekHotKey);
+    AddProperty(Category, 'Image', '', iekImage);
+    InspectorProperty := Category.Properties.Add;
+    InspectorProperty.Name := 'Masked code';
+    InspectorProperty.EditorKind := iekMask;
+    InspectorProperty.EditMask := '0000-0000;1;_';
+    InspectorProperty.Value := '1234-5678';
+    InspectorProperty := Category.Properties.Add;
+    InspectorProperty.Name := 'Enum choice';
+    InspectorProperty.EditorKind := iekEnum;
+    InspectorProperty.DropDownItems.CommaText := 'Small,Medium,Large';
+    InspectorProperty.Value := 'Medium';
+    InspectorProperty := Category.Properties.Add;
+    InspectorProperty.Name := 'Flags';
+    InspectorProperty.EditorKind := iekFlags;
+    InspectorProperty.DropDownItems.CommaText := 'Read,Write,Execute';
+    InspectorProperty.Value := 'Read,Write';
+    AddProperty(Category, 'Custom value', 'Application-defined', iekCustom);
+
+    Category := FInspector.Categories.Add;
     Category.Caption := 'Layout (collapsed initially)';
     Category.Collapsed := True;
     AddProperty(Category, 'Width', 520);
@@ -127,6 +172,8 @@ procedure TMainForm.PropertyButtonClick(const AProperty: TInspectorProperty);
 var
   NewValue: string;
 begin
+  if not (AProperty.EditorKind in [iekText, iekCustom]) then
+    Exit;
   NewValue := VarToStr(AProperty.Value);
   if InputQuery('Edit ' + AProperty.Name, 'Value', NewValue) then
     AProperty.Value := NewValue;

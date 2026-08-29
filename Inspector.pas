@@ -7,10 +7,11 @@
 {           inline editors and edit buttons. VCL        }
 {           are supported.                              }
 {                                                       }
-{           Version: 1.1                                }
+{           Version: 1.2                                }
 {           Date   : 28/08/2026                         }
 {                                                       }
 {           Version History:                            }
+{           - 1.2.0.0 Extended editor collection        }
 {           - 1.1.0.0 Multiple inline editor types      }
 {           - 1.0.0.0                                   }
 {                                                       }
@@ -22,7 +23,8 @@ interface
 
 uses
   WinApi.Windows, WinApi.Messages, System.SysUtils, System.Classes, System.Variants, Vcl.Controls,
-  Vcl.Themes, Vcl.Graphics, System.Types, Vcl.StdCtrls, Vcl.ComCtrls;
+  Vcl.Themes, Vcl.Graphics, System.Types, Vcl.StdCtrls, Vcl.ComCtrls, Vcl.Mask,
+  Vcl.ExtCtrls;
 
 const
   MinimalHeight = 16;
@@ -53,7 +55,10 @@ type
   TInspectorCategory = class;
 
   /// <summary>Selects the inline editor used for an inspector property.</summary>
-  TInspectorEditorKind = (iekText, iekNumber, iekBoolean, iekDropDown, iekDate);
+  TInspectorEditorKind = (iekText, iekNumber, iekBoolean, iekDropDown, iekDate,
+    iekInteger, iekEnum, iekFlags, iekTime, iekDateTime, iekColor, iekFile,
+    iekSaveFile, iekFolder, iekMultiline, iekPassword, iekFont, iekReadOnly,
+    iekSlider, iekHotKey, iekImage, iekMask, iekCustom);
 
   /// <summary>Event raised for a property item.</summary>
   TInspectorPropertyEvent = procedure(const &Property: TInspectorProperty) of object;
@@ -98,6 +103,12 @@ type
     FEditButton: Boolean;
     FEditorKind: TInspectorEditorKind;
     FDropDownItems: TStringList;
+    FMinimum: Integer;
+    FMaximum: Integer;
+    FIncrement: Integer;
+    FEditMask: string;
+    FDialogFilter: string;
+    FPasswordChar: Char;
     FTag: Integer;
 
     FRect: TRect;
@@ -112,6 +123,18 @@ type
     procedure SetDropDownItems(const Items: TStrings);
     /// <summary>Notifies the collection when drop-down choices change.</summary>
     procedure DropDownItemsChanged(Sender: TObject);
+    /// <summary>Sets the lower bound used by integer and slider editors.</summary>
+    procedure SetMinimum(const Value: Integer);
+    /// <summary>Sets the upper bound used by integer and slider editors.</summary>
+    procedure SetMaximum(const Value: Integer);
+    /// <summary>Sets the step size used by integer and slider editors.</summary>
+    procedure SetIncrement(const Value: Integer);
+    /// <summary>Sets the mask used by the masked-text editor.</summary>
+    procedure SetEditMask(const Value: string);
+    /// <summary>Sets the filter used by file and image dialogs.</summary>
+    procedure SetDialogFilter(const Value: string);
+    /// <summary>Sets the masking character used by the password editor.</summary>
+    procedure SetPasswordChar(const Value: Char);
   protected
     function GetDisplayName: string; override;
   public
@@ -131,7 +154,7 @@ type
   published
     /// <summary>Text displayed in the name column.</summary>
     property Name: string read FName write SetName;
-    /// <summary>Variant value displayed and edited as text; Null and Empty display blank.</summary>
+    /// <summary>Variant value displayed and updated by the selected editor kind.</summary>
     property Value: Variant read FValue write SetValue;
     /// <summary>Shows an ellipsis button beside the inline editor.</summary>
     property EditButton: Boolean read FEditButton write SetEditButton default False;
@@ -139,6 +162,18 @@ type
     property EditorKind: TInspectorEditorKind read FEditorKind write SetEditorKind default iekText;
     /// <summary>Contains the choices displayed by the drop-down editor.</summary>
     property DropDownItems: TStrings read FDropDownItems write SetDropDownItems;
+    /// <summary>Lower bound for integer and slider editors.</summary>
+    property Minimum: Integer read FMinimum write SetMinimum default 0;
+    /// <summary>Upper bound for integer and slider editors.</summary>
+    property Maximum: Integer read FMaximum write SetMaximum default 100;
+    /// <summary>Step size for integer and slider editors.</summary>
+    property Increment: Integer read FIncrement write SetIncrement default 1;
+    /// <summary>Input mask used when EditorKind is iekMask.</summary>
+    property EditMask: string read FEditMask write SetEditMask;
+    /// <summary>File filter used by file, save-file, and image editors.</summary>
+    property DialogFilter: string read FDialogFilter write SetDialogFilter;
+    /// <summary>Masking character used when EditorKind is iekPassword.</summary>
+    property PasswordChar: Char read FPasswordChar write SetPasswordChar default '*';
     /// <summary>Application-defined integer associated with this property.</summary>
     property Tag: Integer read FTag write FTag;
   end;
@@ -380,6 +415,11 @@ type
     FInspectorComboBox: TComboBox;
     FInspectorDatePicker: TDateTimePicker;
     FInspectorCheckBox: TCheckBox;
+    FInspectorMaskEdit: TMaskEdit;
+    FInspectorTrackBar: TTrackBar;
+    FInspectorHotKey: THotKey;
+    FInspectorUpDown: TUpDown;
+    FInspectorImage: TImage;
 
     /// <summary>Returns the selected item as a property, or nil.</summary>
     function GetSelectedProperty: TInspectorProperty;
@@ -398,12 +438,29 @@ type
     procedure OnDatePickerChange(Sender: TObject);
     /// <summary>Writes the checked state to the property value.</summary>
     procedure OnCheckBoxClick(Sender: TObject);
+    /// <summary>Writes masked-text changes to the selected property.</summary>
+    procedure OnMaskEditChange(Sender: TObject);
+    /// <summary>Writes slider changes to the selected property.</summary>
+    procedure OnTrackBarChange(Sender: TObject);
+    /// <summary>Writes hot-key changes to the selected property.</summary>
+    procedure OnHotKeyChange(Sender: TObject);
+    /// <summary>Writes integer spin changes to the selected property.</summary>
+    procedure OnUpDownClick(Sender: TObject; Button: TUDBtnType);
     /// <summary>Raises the live property-change event after an editor update.</summary>
     procedure DoPropertyChange(const InspectorProperty: TInspectorProperty);
     /// <summary>Returns the client rectangle used by the active inline editor.</summary>
     function GetEditorBounds(const InspectorProperty: TInspectorProperty): TRect;
     /// <summary>Positions all visible child editors for the selected property.</summary>
     procedure UpdateEditorBounds;
+    /// <summary>Returns true when an editor uses the built-in ellipsis button.</summary>
+    function UsesBuiltInButton(const EditorKind: TInspectorEditorKind): Boolean;
+    /// <summary>Shows the built-in dialog associated with the selected property.</summary>
+    procedure ExecuteBuiltInEditor(const InspectorProperty: TInspectorProperty);
+    /// <summary>Shows a modal multiline text editor.</summary>
+    function EditMultilineValue(var Value: string): Boolean;
+    /// <summary>Shows a modal checklist editor and returns comma-separated flags.</summary>
+    function EditFlagsValue(const InspectorProperty: TInspectorProperty;
+      var Value: string): Boolean;
     /// <summary>Hides and disconnects both child editors.</summary>
     procedure DeactivateEditor;
     /// <summary>Safely converts a Variant to its displayed text.</summary>
@@ -560,7 +617,8 @@ procedure Register;
 
 implementation
 
-uses Vcl.Forms, System.Math;
+uses Vcl.Forms, Vcl.Dialogs, Vcl.FileCtrl, Vcl.CheckLst, Vcl.Imaging.jpeg,
+  Vcl.Imaging.pngimage, System.Math;
 
 procedure Register;
 begin
@@ -645,6 +703,10 @@ begin
   FName := '';
   FValue := '';
   FEditorKind := iekText;
+  FMinimum := 0;
+  FMaximum := 100;
+  FIncrement := 1;
+  FPasswordChar := '*';
   FDropDownItems := TStringList.Create;
   FDropDownItems.OnChange := DropDownItemsChanged;
 end;
@@ -663,6 +725,12 @@ begin
     FValue := TInspectorProperty(Source).Value;
     FEditButton := TInspectorProperty(Source).EditButton;
     FEditorKind := TInspectorProperty(Source).EditorKind;
+    FMinimum := TInspectorProperty(Source).Minimum;
+    FMaximum := TInspectorProperty(Source).Maximum;
+    FIncrement := TInspectorProperty(Source).Increment;
+    FEditMask := TInspectorProperty(Source).EditMask;
+    FDialogFilter := TInspectorProperty(Source).DialogFilter;
+    FPasswordChar := TInspectorProperty(Source).PasswordChar;
     FDropDownItems.OnChange := nil;
     try
       FDropDownItems.Assign(TInspectorProperty(Source).DropDownItems);
@@ -674,6 +742,64 @@ begin
   end
   else
     inherited;
+end;
+
+procedure TInspectorProperty.SetMinimum(const Value: Integer);
+begin
+  if FMinimum <> Value then
+  begin
+    FMinimum := Value;
+    if FMaximum < FMinimum then
+      FMaximum := FMinimum;
+    Changed(False);
+  end;
+end;
+
+procedure TInspectorProperty.SetMaximum(const Value: Integer);
+begin
+  if FMaximum <> Value then
+  begin
+    FMaximum := Value;
+    if FMinimum > FMaximum then
+      FMinimum := FMaximum;
+    Changed(False);
+  end;
+end;
+
+procedure TInspectorProperty.SetIncrement(const Value: Integer);
+begin
+  if (Value > 0) and (FIncrement <> Value) then
+  begin
+    FIncrement := Value;
+    Changed(False);
+  end;
+end;
+
+procedure TInspectorProperty.SetEditMask(const Value: string);
+begin
+  if FEditMask <> Value then
+  begin
+    FEditMask := Value;
+    Changed(False);
+  end;
+end;
+
+procedure TInspectorProperty.SetDialogFilter(const Value: string);
+begin
+  if FDialogFilter <> Value then
+  begin
+    FDialogFilter := Value;
+    Changed(False);
+  end;
+end;
+
+procedure TInspectorProperty.SetPasswordChar(const Value: Char);
+begin
+  if FPasswordChar <> Value then
+  begin
+    FPasswordChar := Value;
+    Changed(False);
+  end;
 end;
 
 procedure TInspectorProperty.SetEditorKind(const EditorKind: TInspectorEditorKind);
@@ -1154,6 +1280,45 @@ begin
   FInspectorCheckBox.OnClick := OnCheckBoxClick;
   FInspectorCheckBox.OnExit := OnPropertyEditorExit;
   FInspectorCheckBox.OnKeyDown := OnPropertyEditorKeyDown;
+
+  FInspectorMaskEdit := TMaskEdit.Create(Self);
+  FInspectorMaskEdit.Font.Assign(PropertyOptions.Font);
+  FInspectorMaskEdit.Parent := Self;
+  FInspectorMaskEdit.Visible := False;
+  FInspectorMaskEdit.BorderStyle := bsNone;
+  FInspectorMaskEdit.OnChange := OnMaskEditChange;
+  FInspectorMaskEdit.OnExit := OnPropertyEditorExit;
+  FInspectorMaskEdit.OnKeyDown := OnPropertyEditorKeyDown;
+
+  FInspectorTrackBar := TTrackBar.Create(Self);
+  FInspectorTrackBar.Parent := Self;
+  FInspectorTrackBar.Visible := False;
+  FInspectorTrackBar.ShowSelRange := False;
+  FInspectorTrackBar.TickStyle := tsNone;
+  FInspectorTrackBar.OnChange := OnTrackBarChange;
+  FInspectorTrackBar.OnExit := OnPropertyEditorExit;
+  FInspectorTrackBar.OnKeyDown := OnPropertyEditorKeyDown;
+
+  FInspectorHotKey := THotKey.Create(Self);
+  FInspectorHotKey.Font.Assign(PropertyOptions.Font);
+  FInspectorHotKey.Parent := Self;
+  FInspectorHotKey.Visible := False;
+  FInspectorHotKey.OnChange := OnHotKeyChange;
+  FInspectorHotKey.OnExit := OnPropertyEditorExit;
+  FInspectorHotKey.OnKeyDown := OnPropertyEditorKeyDown;
+
+  FInspectorUpDown := TUpDown.Create(Self);
+  FInspectorUpDown.Parent := Self;
+  FInspectorUpDown.Visible := False;
+  FInspectorUpDown.Associate := FInspectorEdit;
+  FInspectorUpDown.OnClick := OnUpDownClick;
+
+  FInspectorImage := TImage.Create(Self);
+  FInspectorImage.Parent := Self;
+  FInspectorImage.Visible := False;
+  FInspectorImage.Center := True;
+  FInspectorImage.Proportional := True;
+  FInspectorImage.Stretch := True;
 end;
 
 destructor TInspector.Destroy;
@@ -1170,6 +1335,11 @@ begin
   if Assigned(FSplitter) then
     FSplitter.OnChange := nil;
 
+  FInspectorImage.Free;
+  FInspectorUpDown.Free;
+  FInspectorHotKey.Free;
+  FInspectorTrackBar.Free;
+  FInspectorMaskEdit.Free;
   FInspectorCheckBox.Free;
   FInspectorDatePicker.Free;
   FInspectorComboBox.Free;
@@ -1347,6 +1517,8 @@ begin
   FInspectorComboBox.Font.Assign(PropertyOptions.Font);
   FInspectorDatePicker.Font.Assign(PropertyOptions.Font);
   FInspectorCheckBox.Font.Assign(PropertyOptions.Font);
+  FInspectorMaskEdit.Font.Assign(PropertyOptions.Font);
+  FInspectorHotKey.Font.Assign(PropertyOptions.Font);
   if FUpdateCount > -1 then
     Exit;
   UpdateRects;
@@ -1363,6 +1535,11 @@ begin
   FInspectorComboBox.Visible := False;
   FInspectorDatePicker.Visible := False;
   FInspectorCheckBox.Visible := False;
+  FInspectorMaskEdit.Visible := False;
+  FInspectorTrackBar.Visible := False;
+  FInspectorHotKey.Visible := False;
+  FInspectorUpDown.Visible := False;
+  FInspectorImage.Visible := False;
   FInspectorEdit.InspectorProperty := nil;
 end;
 
@@ -2295,7 +2472,10 @@ begin
   Result := InspectorProperty.EditorRect;
   Result.Width := Max(0, Result.Width - Scale(TextOffset));
   OffsetRect(Result, Scale(GutterOptions.Width + TextOffset + 1), -FScrollPos);
-  if InspectorProperty.EditButton then
+  if InspectorProperty.EditButton or UsesBuiltInButton(InspectorProperty.EditorKind) or
+    (InspectorProperty.EditorKind = iekCustom) then
+    Result.Right := Max(Result.Left, Result.Right - Scale(ButtonWidth));
+  if InspectorProperty.EditorKind = iekInteger then
     Result.Right := Max(Result.Left, Result.Right - Scale(ButtonWidth));
 end;
 
@@ -2309,7 +2489,11 @@ begin
 
   EditorRect := GetEditorBounds(TInspectorProperty(Selected));
   ButtonRect := EditorRect;
-  if TInspectorProperty(Selected).EditButton then
+  if TInspectorProperty(Selected).EditorKind = iekInteger then
+    Inc(ButtonRect.Right, Scale(ButtonWidth));
+  if TInspectorProperty(Selected).EditButton or
+    UsesBuiltInButton(TInspectorProperty(Selected).EditorKind) or
+    (TInspectorProperty(Selected).EditorKind = iekCustom) then
     Inc(ButtonRect.Right, Scale(ButtonWidth));
 
   if FInspectorEdit.Visible then
@@ -2323,6 +2507,21 @@ begin
   if FInspectorCheckBox.Visible then
     FInspectorCheckBox.SetBounds(EditorRect.Left + Scale(TextOffset), EditorRect.Top,
       Max(0, EditorRect.Width - Scale(TextOffset)), Max(1, EditorRect.Height));
+  if FInspectorMaskEdit.Visible then
+    FInspectorMaskEdit.SetBounds(EditorRect.Left, EditorRect.Top,
+      Max(0, EditorRect.Width), Max(1, EditorRect.Height));
+  if FInspectorTrackBar.Visible then
+    FInspectorTrackBar.SetBounds(EditorRect.Left, EditorRect.Top,
+      Max(0, EditorRect.Width), Max(1, EditorRect.Height));
+  if FInspectorHotKey.Visible then
+    FInspectorHotKey.SetBounds(EditorRect.Left, EditorRect.Top,
+      Max(0, EditorRect.Width), Max(1, EditorRect.Height));
+  if FInspectorUpDown.Visible then
+    FInspectorUpDown.SetBounds(EditorRect.Right,
+      EditorRect.Top, Scale(ButtonWidth), Max(1, EditorRect.Height));
+  if FInspectorImage.Visible then
+    FInspectorImage.SetBounds(EditorRect.Left, EditorRect.Top,
+      Max(0, EditorRect.Width), Max(1, EditorRect.Height));
   if FInspectorEditButton.Visible then
     FInspectorEditButton.UpdateEditorPosition(ButtonRect);
 end;
@@ -2373,16 +2572,40 @@ begin
   FInspectorEdit.InspectorProperty := InspectorProperty;
   FEditorUpdating := True;
   try
-    if InspectorProperty.EditButton then
+    if InspectorProperty.EditButton or UsesBuiltInButton(InspectorProperty.EditorKind) or
+      (InspectorProperty.EditorKind = iekCustom) then
       FInspectorEditButton.SetEditorActive(EditorRect);
 
+    FInspectorEdit.PasswordChar := #0;
     case InspectorProperty.EditorKind of
-      iekText, iekNumber:
+      iekText, iekNumber, iekColor, iekFile, iekSaveFile, iekFolder,
+      iekMultiline, iekFont, iekFlags:
         begin
           if InspectorProperty.EditorKind = iekNumber then
             FInspectorEdit.OnKeyPress := OnNumberEditorKeyPress
           else
             FInspectorEdit.OnKeyPress := nil;
+          FInspectorEdit.SetEditorActive(EditorRect,
+            DisplayText(InspectorProperty.Value));
+        end;
+      iekInteger:
+        begin
+          FInspectorEdit.OnKeyPress := OnNumberEditorKeyPress;
+          FInspectorEdit.SetEditorActive(EditorRect,
+            DisplayText(InspectorProperty.Value));
+          FInspectorUpDown.Min := InspectorProperty.Minimum;
+          FInspectorUpDown.Max := InspectorProperty.Maximum;
+          FInspectorUpDown.Increment := InspectorProperty.Increment;
+          FInspectorUpDown.Position := EnsureRange(
+            StrToIntDef(DisplayText(InspectorProperty.Value),
+              InspectorProperty.Minimum), InspectorProperty.Minimum,
+              InspectorProperty.Maximum);
+          FInspectorUpDown.Visible := True;
+        end;
+      iekPassword:
+        begin
+          FInspectorEdit.OnKeyPress := nil;
+          FInspectorEdit.PasswordChar := InspectorProperty.PasswordChar;
           FInspectorEdit.SetEditorActive(EditorRect,
             DisplayText(InspectorProperty.Value));
         end;
@@ -2392,10 +2615,9 @@ begin
           FInspectorCheckBox.Checked := SameText(BooleanText, 'True') or
             SameText(BooleanText, 'Yes') or (BooleanText = '1');
           FInspectorCheckBox.Visible := True;
-          UpdateEditorBounds;
           FInspectorCheckBox.SetFocus;
         end;
-      iekDropDown:
+      iekDropDown, iekEnum:
         begin
           FInspectorComboBox.Items.Assign(InspectorProperty.DropDownItems);
           FInspectorComboBox.ItemIndex := FInspectorComboBox.Items.IndexOf(
@@ -2408,17 +2630,70 @@ begin
             FInspectorComboBox.ItemIndex := 0;
           end;
           FInspectorComboBox.Visible := True;
-          UpdateEditorBounds;
           FInspectorComboBox.SetFocus;
         end;
-      iekDate:
+      iekDate, iekTime, iekDateTime:
         begin
           DateValue := Date;
           TryStrToDateTime(DisplayText(InspectorProperty.Value), DateValue);
+          if InspectorProperty.EditorKind = iekTime then
+            FInspectorDatePicker.Kind := dtkTime
+          else
+            FInspectorDatePicker.Kind := dtkDate;
+          if InspectorProperty.EditorKind = iekDateTime then
+            FInspectorDatePicker.Format := 'ddddd tt'
+          else
+            FInspectorDatePicker.Format := '';
           FInspectorDatePicker.DateTime := DateValue;
           FInspectorDatePicker.Visible := True;
-          UpdateEditorBounds;
           FInspectorDatePicker.SetFocus;
+        end;
+      iekReadOnly, iekCustom:
+        if CanFocus then
+          SetFocus;
+      iekSlider:
+        begin
+          FInspectorTrackBar.Min := InspectorProperty.Minimum;
+          FInspectorTrackBar.Max := InspectorProperty.Maximum;
+          FInspectorTrackBar.Frequency := InspectorProperty.Increment;
+          FInspectorTrackBar.Position := EnsureRange(
+            StrToIntDef(DisplayText(InspectorProperty.Value),
+              InspectorProperty.Minimum), InspectorProperty.Minimum,
+              InspectorProperty.Maximum);
+          FInspectorTrackBar.Visible := True;
+          FInspectorTrackBar.SetFocus;
+        end;
+      iekHotKey:
+        begin
+          FInspectorHotKey.HotKey := StrToIntDef(
+            DisplayText(InspectorProperty.Value), 0);
+          FInspectorHotKey.Visible := True;
+          FInspectorHotKey.SetFocus;
+        end;
+      iekMask:
+        begin
+          FInspectorMaskEdit.EditMask := InspectorProperty.EditMask;
+          try
+            FInspectorMaskEdit.Text := DisplayText(InspectorProperty.Value);
+          except
+            FInspectorMaskEdit.Text := '';
+          end;
+          FInspectorMaskEdit.Visible := True;
+          FInspectorMaskEdit.SetFocus;
+        end;
+      iekImage:
+        begin
+          FInspectorImage.Picture.Graphic := nil;
+          if FileExists(DisplayText(InspectorProperty.Value)) then
+            try
+              FInspectorImage.Picture.LoadFromFile(
+                DisplayText(InspectorProperty.Value));
+            except
+              FInspectorImage.Picture.Graphic := nil;
+            end;
+          FInspectorImage.Visible := True;
+          if CanFocus then
+            SetFocus;
         end;
     end;
     UpdateEditorBounds;
@@ -2453,9 +2728,15 @@ end;
 
 procedure TInspector.OnNumberEditorKeyPress(Sender: TObject; var Key: Char);
 begin
-  if (Key >= #32) and not CharInSet(Key, ['0'..'9', '-', '+',
-    FormatSettings.DecimalSeparator]) then
-    Key := #0;
+  if Key < #32 then
+    Exit;
+  if CharInSet(Key, ['0'..'9', '-', '+']) then
+    Exit;
+  if (Selected is TInspectorProperty) and
+    (TInspectorProperty(Selected).EditorKind = iekNumber) and
+    (Key = FormatSettings.DecimalSeparator) then
+    Exit;
+  Key := #0;
 end;
 
 procedure TInspector.DoPropertyChange(
@@ -2499,6 +2780,53 @@ begin
   DoPropertyChange(InspectorProperty);
 end;
 
+procedure TInspector.OnMaskEditChange(Sender: TObject);
+var
+  InspectorProperty: TInspectorProperty;
+begin
+  if FEditorUpdating or not (Selected is TInspectorProperty) then
+    Exit;
+  InspectorProperty := TInspectorProperty(Selected);
+  InspectorProperty.Value := FInspectorMaskEdit.Text;
+  DoPropertyChange(InspectorProperty);
+end;
+
+procedure TInspector.OnTrackBarChange(Sender: TObject);
+var
+  InspectorProperty: TInspectorProperty;
+begin
+  if FEditorUpdating or not (Selected is TInspectorProperty) then
+    Exit;
+  InspectorProperty := TInspectorProperty(Selected);
+  InspectorProperty.Value := FInspectorTrackBar.Position;
+  DoPropertyChange(InspectorProperty);
+end;
+
+procedure TInspector.OnHotKeyChange(Sender: TObject);
+var
+  InspectorProperty: TInspectorProperty;
+begin
+  if FEditorUpdating or not (Selected is TInspectorProperty) then
+    Exit;
+  InspectorProperty := TInspectorProperty(Selected);
+  InspectorProperty.Value := FInspectorHotKey.HotKey;
+  DoPropertyChange(InspectorProperty);
+end;
+
+procedure TInspector.OnUpDownClick(Sender: TObject; Button: TUDBtnType);
+var
+  InspectorProperty: TInspectorProperty;
+begin
+  if FEditorUpdating or not (Selected is TInspectorProperty) then
+    Exit;
+  InspectorProperty := TInspectorProperty(Selected);
+  if VarSameValue(InspectorProperty.Value, FInspectorUpDown.Position) then
+    Exit;
+  InspectorProperty.Value := FInspectorUpDown.Position;
+  FInspectorEdit.Text := IntToStr(FInspectorUpDown.Position);
+  DoPropertyChange(InspectorProperty);
+end;
+
 procedure TInspector.OnPropertyEditorExit(Sender: TObject);
 begin
   if (FInspectorEdit.InspectorProperty <> nil) and
@@ -2510,6 +2838,7 @@ procedure TInspector.OnPropertyEditorChange(Sender: TObject);
 var
   InspectorProperty: TInspectorProperty;
   NumberValue: Double;
+  IntegerValue: Int64;
 begin
   if FEditorUpdating or not FInspectorEditActive or
     not (Selected is TInspectorProperty) then
@@ -2522,9 +2851,189 @@ begin
       Exit;
     InspectorProperty.Value := NumberValue;
   end
+  else if InspectorProperty.EditorKind = iekInteger then
+  begin
+    if not TryStrToInt64(FInspectorEdit.Text, IntegerValue) then
+      Exit;
+    if IntegerValue < InspectorProperty.Minimum then
+      IntegerValue := InspectorProperty.Minimum
+    else if IntegerValue > InspectorProperty.Maximum then
+      IntegerValue := InspectorProperty.Maximum;
+    InspectorProperty.Value := IntegerValue;
+  end
   else
     InspectorProperty.Value := FInspectorEdit.Text;
   DoPropertyChange(InspectorProperty);
+end;
+
+function TInspector.UsesBuiltInButton(
+  const EditorKind: TInspectorEditorKind): Boolean;
+begin
+  Result := EditorKind in [iekFlags, iekColor, iekFile, iekSaveFile,
+    iekFolder, iekMultiline, iekFont, iekImage];
+end;
+
+function TInspector.EditMultilineValue(var Value: string): Boolean;
+var
+  Dialog: TForm;
+  Memo: TMemo;
+  OKButton: TButton;
+  CancelButton: TButton;
+begin
+  Dialog := TForm.CreateNew(Self);
+  try
+    Dialog.Caption := 'Edit value';
+    Dialog.Position := poOwnerFormCenter;
+    Dialog.ClientWidth := Scale(480);
+    Dialog.ClientHeight := Scale(300);
+    Memo := TMemo.Create(Dialog);
+    Memo.Parent := Dialog;
+    Memo.Align := alClient;
+    Memo.ScrollBars := ssBoth;
+    Memo.Text := Value;
+    OKButton := TButton.Create(Dialog);
+    OKButton.Parent := Dialog;
+    OKButton.Align := alBottom;
+    OKButton.Caption := 'OK';
+    OKButton.Default := True;
+    OKButton.ModalResult := mrOk;
+    CancelButton := TButton.Create(Dialog);
+    CancelButton.Parent := Dialog;
+    CancelButton.Align := alBottom;
+    CancelButton.Caption := 'Cancel';
+    CancelButton.Cancel := True;
+    CancelButton.ModalResult := mrCancel;
+    Result := Dialog.ShowModal = mrOk;
+    if Result then
+      Value := Memo.Text;
+  finally
+    Dialog.Free;
+  end;
+end;
+
+function TInspector.EditFlagsValue(
+  const InspectorProperty: TInspectorProperty; var Value: string): Boolean;
+var
+  Dialog: TForm;
+  CheckList: TCheckListBox;
+  SelectedItems: TStringList;
+  OKButton: TButton;
+  CancelButton: TButton;
+  Index: Integer;
+begin
+  Dialog := TForm.CreateNew(Self);
+  SelectedItems := TStringList.Create;
+  try
+    Dialog.Caption := 'Select values';
+    Dialog.Position := poOwnerFormCenter;
+    Dialog.ClientWidth := Scale(320);
+    Dialog.ClientHeight := Scale(300);
+    CheckList := TCheckListBox.Create(Dialog);
+    CheckList.Parent := Dialog;
+    CheckList.Align := alClient;
+    CheckList.Items.Assign(InspectorProperty.DropDownItems);
+    SelectedItems.StrictDelimiter := True;
+    SelectedItems.CommaText := Value;
+    for Index := 0 to CheckList.Items.Count - 1 do
+      CheckList.Checked[Index] := SelectedItems.IndexOf(CheckList.Items[Index]) >= 0;
+    OKButton := TButton.Create(Dialog);
+    OKButton.Parent := Dialog;
+    OKButton.Align := alBottom;
+    OKButton.Caption := 'OK';
+    OKButton.Default := True;
+    OKButton.ModalResult := mrOk;
+    CancelButton := TButton.Create(Dialog);
+    CancelButton.Parent := Dialog;
+    CancelButton.Align := alBottom;
+    CancelButton.Caption := 'Cancel';
+    CancelButton.Cancel := True;
+    CancelButton.ModalResult := mrCancel;
+    Result := Dialog.ShowModal = mrOk;
+    if Result then
+    begin
+      SelectedItems.Clear;
+      for Index := 0 to CheckList.Items.Count - 1 do
+        if CheckList.Checked[Index] then
+          SelectedItems.Add(CheckList.Items[Index]);
+      Value := SelectedItems.CommaText;
+    end;
+  finally
+    SelectedItems.Free;
+    Dialog.Free;
+  end;
+end;
+
+procedure TInspector.ExecuteBuiltInEditor(
+  const InspectorProperty: TInspectorProperty);
+var
+  ColorDialog: TColorDialog;
+  FileDialog: TOpenDialog;
+  SaveDialog: TSaveDialog;
+  FontDialog: TFontDialog;
+  TextValue: string;
+begin
+  TextValue := DisplayText(InspectorProperty.Value);
+  case InspectorProperty.EditorKind of
+    iekColor:
+      begin
+        ColorDialog := TColorDialog.Create(nil);
+        try
+          ColorDialog.Color := StrToIntDef(TextValue, clWindow);
+          if ColorDialog.Execute then
+            InspectorProperty.Value := ColorDialog.Color;
+        finally
+          ColorDialog.Free;
+        end;
+      end;
+    iekFile, iekImage:
+      begin
+        FileDialog := TOpenDialog.Create(nil);
+        try
+          FileDialog.FileName := TextValue;
+          FileDialog.Filter := InspectorProperty.DialogFilter;
+          if (FileDialog.Filter = '') and
+            (InspectorProperty.EditorKind = iekImage) then
+            FileDialog.Filter := 'Images|*.bmp;*.png;*.jpg;*.jpeg;*.gif;*.ico|All files|*.*';
+          if FileDialog.Execute then
+            InspectorProperty.Value := FileDialog.FileName;
+        finally
+          FileDialog.Free;
+        end;
+      end;
+    iekSaveFile:
+      begin
+        SaveDialog := TSaveDialog.Create(nil);
+        try
+          SaveDialog.FileName := TextValue;
+          SaveDialog.Filter := InspectorProperty.DialogFilter;
+          if SaveDialog.Execute then
+            InspectorProperty.Value := SaveDialog.FileName;
+        finally
+          SaveDialog.Free;
+        end;
+      end;
+    iekFolder:
+      if SelectDirectory('Select folder', '', TextValue) then
+        InspectorProperty.Value := TextValue;
+    iekMultiline:
+      if EditMultilineValue(TextValue) then
+        InspectorProperty.Value := TextValue;
+    iekFlags:
+      if EditFlagsValue(InspectorProperty, TextValue) then
+        InspectorProperty.Value := TextValue;
+    iekFont:
+      begin
+        FontDialog := TFontDialog.Create(nil);
+        try
+          FontDialog.Font.Name := TextValue;
+          if FontDialog.Execute then
+            InspectorProperty.Value := Format('%s, %d pt',
+              [FontDialog.Font.Name, FontDialog.Font.Size]);
+        finally
+          FontDialog.Free;
+        end;
+      end;
+  end;
 end;
 
 procedure TInspector.OnPropertyEditorButtonClick(Sender: TObject);
@@ -2532,11 +3041,21 @@ var
   InspectorProperty: TInspectorProperty;
   DateValue: TDateTime;
   BooleanText: string;
+  PreviousValue: string;
 begin
   if not (Selected is TInspectorProperty) then
     Exit;
 
   InspectorProperty := TInspectorProperty(Selected);
+  PreviousValue := DisplayText(InspectorProperty.Value);
+  if UsesBuiltInButton(InspectorProperty.EditorKind) then
+  begin
+    ExecuteBuiltInEditor(InspectorProperty);
+    if DisplayText(InspectorProperty.Value) <> PreviousValue then
+      DoPropertyChange(InspectorProperty);
+  end;
+  if not IsItemOwned(InspectorProperty) or (Selected <> InspectorProperty) then
+    Exit;
   if Assigned(OnPropertyButtonClick) then
     OnPropertyButtonClick(InspectorProperty);
   if not IsItemOwned(InspectorProperty) or (Selected <> InspectorProperty) then
@@ -2545,7 +3064,8 @@ begin
   FEditorUpdating := True;
   try
     case InspectorProperty.EditorKind of
-      iekText, iekNumber:
+      iekText, iekNumber, iekInteger, iekFlags, iekColor, iekFile,
+      iekSaveFile, iekFolder, iekMultiline, iekPassword, iekFont:
         begin
           FInspectorEdit.Text := DisplayText(InspectorProperty.Value);
           FInspectorEdit.SelectAll;
@@ -2556,14 +3076,25 @@ begin
           FInspectorCheckBox.Checked := SameText(BooleanText, 'True') or
             SameText(BooleanText, 'Yes') or (BooleanText = '1');
         end;
-      iekDropDown:
+      iekDropDown, iekEnum:
         FInspectorComboBox.ItemIndex := FInspectorComboBox.Items.IndexOf(
           DisplayText(InspectorProperty.Value));
-      iekDate:
+      iekDate, iekTime, iekDateTime:
         begin
           DateValue := FInspectorDatePicker.DateTime;
           if TryStrToDateTime(DisplayText(InspectorProperty.Value), DateValue) then
             FInspectorDatePicker.DateTime := DateValue;
+        end;
+      iekImage:
+        begin
+          FInspectorImage.Picture.Graphic := nil;
+          if FileExists(DisplayText(InspectorProperty.Value)) then
+            try
+              FInspectorImage.Picture.LoadFromFile(
+                DisplayText(InspectorProperty.Value));
+            except
+              FInspectorImage.Picture.Graphic := nil;
+            end;
         end;
     end;
   finally

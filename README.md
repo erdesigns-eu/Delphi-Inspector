@@ -97,13 +97,38 @@ Set a property's `EditorKind` to select its inline editor:
 | Editor kind | Behavior | Value written to `Value` |
 | --- | --- | --- |
 | `iekText` | Borderless text editor | `String` |
-| `iekNumber` | Text editor restricted to numeric input | `Double` after valid input |
+| `iekNumber` | Locale-aware decimal input | `Double` |
+| `iekInteger` | Bounded integer input with spin buttons | `Int64` |
 | `iekBoolean` | Check box | `Boolean` |
-| `iekDropDown` | Fixed-choice combo box using `DropDownItems` | Selected `String` |
-| `iekDate` | Native VCL date picker | `TDateTime` stored in a `Variant` |
+| `iekDropDown` | Fixed choice from `DropDownItems` | `String` |
+| `iekEnum` | Named single choice from `DropDownItems` | `String` |
+| `iekFlags` | Modal multi-choice checklist | Comma-separated `String` |
+| `iekDate` | Native date picker | `TDateTime` |
+| `iekTime` | Native time picker | `TDateTime` |
+| `iekDateTime` | Combined date/time picker | `TDateTime` |
+| `iekColor` | Text value with `TColorDialog` | `TColor`/Integer |
+| `iekFile` | Open-file dialog | File name `String` |
+| `iekSaveFile` | Save-file dialog | File name `String` |
+| `iekFolder` | Folder selector | Directory `String` |
+| `iekMultiline` | Modal memo editor | `String` |
+| `iekPassword` | Password-character text editor | `String` |
+| `iekFont` | `TFontDialog` | Font summary `String` |
+| `iekReadOnly` | Painted value without an inline control | Existing Variant type |
+| `iekSlider` | Bounded track bar | `Integer` |
+| `iekHotKey` | Native hot-key control | Hot-key `Integer` |
+| `iekImage` | Image preview with image-file dialog | File name `String` |
+| `iekMask` | Masked text input using `EditMask` | `String` |
+| `iekCustom` | Application-supplied button editor | Application-defined |
 
 `EditButton` remains independent of `EditorKind`. Set it to `True` to place an
 ellipsis button beside any editor and handle the action through
+`OnPropertyButtonClick`.
+
+Editor-specific settings are kept on `TInspectorProperty`: `Minimum`, `Maximum`,
+`Increment`, `EditMask`, `DialogFilter`, `PasswordChar`, and `DropDownItems`.
+Dialog-based editors provide their standard VCL dialog automatically and still raise
+`OnPropertyButtonClick` afterwards for application-specific processing.
+`iekCustom` always shows an ellipsis button and delegates editing completely to
 `OnPropertyButtonClick`.
 
 ## Handling events
@@ -184,7 +209,7 @@ Dimensions are stored as logical 96-DPI values and scaled using the control's cu
 
 [`examples/InspectorDemo`](examples/InspectorDemo) contains a minimal VCL form application demonstrating:
 
-- Text, number, Boolean, drop-down, and date properties
+- All built-in text, numeric, choice, date/time, dialog, slider, hot-key, image, and mask editors
 - An edit-button property
 - An initially collapsed category
 - Selection and change events
