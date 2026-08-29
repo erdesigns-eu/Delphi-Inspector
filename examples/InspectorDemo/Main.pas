@@ -7,9 +7,9 @@ uses
   Vcl.Themes, Inspector;
 
 type
-  /// <summary>Minimal, code-only demonstration form for TInspector.</summary>
+  /// <summary>Demonstration form for the Delphi Inspector component.</summary>
   TMainForm = class(TForm)
-  private
+  published
     FInspector: TInspector;
     FStatus: TLabel;
     FStyleSelector: TComboBox;
@@ -27,6 +27,7 @@ type
     procedure CategoryCollapsed(const ACategory: TInspectorCategory);
     /// <summary>Reports that a category was expanded.</summary>
     procedure CategoryExpanded(const ACategory: TInspectorCategory);
+  private
     /// <summary>Adds one property to a category.</summary>
     procedure AddProperty(const ACategory: TInspectorCategory; const AName: string;
       const AValue: Variant; const AEditorKind: TInspectorEditorKind = iekText;
@@ -41,6 +42,8 @@ var
 
 implementation
 
+{$R *.dfm}
+
 uses
   Vcl.Dialogs;
 
@@ -50,37 +53,12 @@ var
   InspectorProperty: TInspectorProperty;
   StyleName: string;
 begin
-  inherited CreateNew(AOwner);
-  Caption := 'Delphi Inspector Demo';
-  ClientWidth := 520;
-  ClientHeight := 380;
-  Position := poScreenCenter;
+  inherited Create(AOwner);
 
-  FStatus := TLabel.Create(Self);
-  FStatus.Parent := Self;
-  FStatus.Align := alBottom;
-  FStatus.Height := 28;
-  FStatus.Caption := 'Select or edit a property.';
-
-  FStyleSelector := TComboBox.Create(Self);
-  FStyleSelector.Parent := Self;
-  FStyleSelector.Align := alTop;
-  FStyleSelector.Style := csDropDownList;
   for StyleName in TStyleManager.StyleNames do
     FStyleSelector.Items.Add(StyleName);
   FStyleSelector.ItemIndex := FStyleSelector.Items.IndexOf(
     TStyleManager.ActiveStyle.Name);
-  FStyleSelector.OnChange := StyleChanged;
-
-  FInspector := TInspector.Create(Self);
-  FInspector.Parent := Self;
-  FInspector.Align := alClient;
-  FInspector.OnPropertySelect := PropertySelected;
-  FInspector.OnPropertyChange := PropertyChanging;
-  FInspector.OnPropertyChanged := PropertyChanged;
-  FInspector.OnPropertyButtonClick := PropertyButtonClick;
-  FInspector.OnCategoryCollapse := CategoryCollapsed;
-  FInspector.OnCategoryExpand := CategoryExpanded;
 
   FInspector.BeginUpdate;
   try

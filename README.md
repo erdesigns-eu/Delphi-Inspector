@@ -182,7 +182,7 @@ Dimensions are stored as logical 96-DPI values and scaled using the control's cu
 
 ## Example application
 
-[`examples/InspectorDemo`](examples/InspectorDemo) contains a minimal code-only VCL application demonstrating:
+[`examples/InspectorDemo`](examples/InspectorDemo) contains a minimal VCL form application demonstrating:
 
 - Text, number, Boolean, drop-down, and date properties
 - An edit-button property
@@ -191,7 +191,7 @@ Dimensions are stored as logical 96-DPI values and scaled using the control's cu
 - Category collapse and expand events
 - Runtime VCL Style selection
 
-Open `examples/InspectorDemo/InspectorDemo.dpr` in Delphi to build and run it.
+Open `examples/InspectorDemo/InspectorDemo.dpr` in Delphi to inspect the form in the Form Designer, then build and run it.
 
 ## Screenshots
 
